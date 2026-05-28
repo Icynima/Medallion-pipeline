@@ -1,0 +1,35 @@
+version: '3.8'
+
+# Docker Compose configuration for Day 2 Kafka lab
+#
+# This Compose file starts a single-node Apache Kafka cluster
+# running in KRaft (no ZooKeeper) mode.  The broker listens on
+# port 9092 for client connections.  A schema registry is not
+# included to keep the example simple; you can add one (e.g.,
+# `confluentinc/cp-schema-registry`) for Avro serialization
+# experiments.
+
+services:
+  kafka:
+    image: confluentinc/cp-kafka:7.4.0
+    container_name: day2_kafka
+    environment:
+      KAFKA_PROCESS_ROLES: 'broker,controller'
+      # Unique ID for the broker in the quorum
+      KAFKA_NODE_ID: 1
+      # The controller quorum voters specify the node IDs and addresses
+      KAFKA_CONTROLLER_QUORUM_VOTERS: '1@kafka:9093'
+      # Define listeners for client (PLAINTEXT) and controller roles
+      KAFKA_LISTENERS: 'PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093'
+      KAFKA_ADVERTISED_LISTENERS: 'PLAINTEXT://localhost:9092'
+      KAFKA_CONTROLLER_LISTENER_NAMES: 'CONTROLLER'
+      KAFKA_INTER_BROKER_LISTENER_NAME: 'PLAINTEXT'
+      # Other common settings
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
+    ports:
+      - '9092:9092'
+      - '9093:9093'
+    volumes:
+      - ./data:/var/lib/kafka/data

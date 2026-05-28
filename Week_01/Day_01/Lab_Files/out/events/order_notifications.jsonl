@@ -1,0 +1,1 @@
+{"specversion":"1.0","id":"ev-live-001","source":"/lab/order-api","type":"training.order.submitted.v1","time":"2026-05-25T16:51:03.453628+00:00","subject":"order/O-LIVE-002","data":{"order_id":"O-LIVE-002","customer_id":"C-041","amount":149.9}}

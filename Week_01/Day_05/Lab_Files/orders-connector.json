@@ -1,0 +1,20 @@
+{
+  "name": "orders-connector",
+  "config": {
+    "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+    "tasks.max": "1",
+    "database.hostname": "postgres",
+    "database.port": "5432",
+    "database.user": "debezium",
+    "database.password": "dbz",
+    "database.dbname": "ordersdb",
+    "database.server.name": "northstar_orders",
+    "table.include.list": "public.orders",
+    "topic.prefix": "northstar.orders",
+    "slot.name": "orders_slot",
+    "publication.name": "orders_publication",
+    "plugin.name": "pgoutput",
+    "snapshot.mode": "initial",
+    "tombstones.on.delete": "false"
+  }
+}
