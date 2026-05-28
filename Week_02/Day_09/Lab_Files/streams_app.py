@@ -11,11 +11,13 @@ Kafka Streams implementation, it illustrates the core concepts of
 stream-table duality and real-time aggregation in Python.
 
 Usage:
-    python streams_app.py
+    python3 streams_app.py
+    DAY9_MAX_MESSAGES=10 python3 streams_app.py
 
 Make sure the Kafka cluster is running and the `orders` topic exists.
 """
 import json
+import os
 import time
 from collections import defaultdict, deque
 from datetime import datetime, timedelta
@@ -23,6 +25,7 @@ from kafka import KafkaConsumer, KafkaProducer
 
 
 WINDOW_SIZE_SECONDS = 60  # 1-minute tumbling window
+MAX_MESSAGES = int(os.environ.get('DAY9_MAX_MESSAGES', '0'))
 
 
 def main():
@@ -61,16 +64,19 @@ def main():
 
     last_emit = time.time()
     try:
+        processed = 0
         for msg in consumer:
             record = msg.value
             cust_id = record.get('customer_id')
-            ts = record.get('created_at') or record.get('timestamp') or time.time()
             if cust_id is not None:
-                windows[cust_id].append({'timestamp': ts, 'amount': record.get('amount', 0.0)})
+                windows[cust_id].append({'timestamp': time.time(), 'amount': record.get('amount', 0.0)})
+                processed += 1
             # emit aggregates every few seconds
-            if time.time() - last_emit > 10:
+            if time.time() - last_emit > 5:
                 emit_aggregates()
                 last_emit = time.time()
+            if MAX_MESSAGES and processed >= MAX_MESSAGES:
+                break
     except KeyboardInterrupt:
         print("Stopping stream processor...")
     finally:

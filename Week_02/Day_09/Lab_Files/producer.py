@@ -5,7 +5,8 @@ containing order events and publishes each record to the `orders` topic
 on the local Kafka cluster.  It uses the kafka-python client library.
 
 Usage:
-    python producer.py orders.json
+    python3 producer.py
+    python3 producer.py orders.json
 
 Ensure that the Kafka cluster defined in the provided docker-compose
 configuration is running before executing this script.
@@ -44,7 +45,4 @@ def main(json_path: str):
 
 
 if __name__ == '__main__':
-    if len(sys.argv) != 2:
-        print("Usage: python producer.py path/to/orders.json")
-        sys.exit(1)
-    main(sys.argv[1])
+    main(sys.argv[1] if len(sys.argv) == 2 else 'orders.json')
