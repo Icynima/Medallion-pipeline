@@ -1,0 +1,30 @@
+{
+  "name": "inventory-flat-connector",
+  "config": {
+    "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+    "tasks.max": "1",
+    "plugin.name": "pgoutput",
+    "database.hostname": "postgres",
+    "database.port": "5432",
+    "database.user": "postgres",
+    "database.password": "postgres",
+    "database.dbname": "inventory",
+    "topic.prefix": "inventory_flat",
+    "schema.include.list": "public",
+    "table.include.list": "public.customers,public.orders",
+    "slot.name": "inventory_flat_slot",
+    "publication.name": "inventory_flat_pub",
+    "publication.autocreate.mode": "filtered",
+    "snapshot.mode": "initial",
+    "tombstones.on.delete": "true",
+    "include.schema.changes": "false",
+    "heartbeat.interval.ms": "10000",
+    "transforms": "unwrap,route",
+    "transforms.unwrap.type": "io.debezium.transforms.ExtractNewRecordState",
+    "transforms.unwrap.delete.tombstone.handling.mode": "rewrite",
+    "transforms.unwrap.add.fields": "op,table,lsn,source.ts_ms",
+    "transforms.route.type": "org.apache.kafka.connect.transforms.RegexRouter",
+    "transforms.route.regex": "(.*)",
+    "transforms.route.replacement": "$1-flat"
+  }
+}

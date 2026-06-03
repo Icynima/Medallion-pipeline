@@ -1,0 +1,25 @@
+{
+  "name": "inventory-envelope-connector",
+  "config": {
+    "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+    "tasks.max": "1",
+    "plugin.name": "pgoutput",
+    "database.hostname": "postgres",
+    "database.port": "5432",
+    "database.user": "postgres",
+    "database.password": "postgres",
+    "database.dbname": "inventory",
+    "topic.prefix": "inventory",
+    "schema.include.list": "public",
+    "table.include.list": "public.customers,public.orders",
+    "slot.name": "inventory_envelope_slot",
+    "publication.name": "inventory_envelope_pub",
+    "publication.autocreate.mode": "filtered",
+    "snapshot.mode": "initial",
+    "tombstones.on.delete": "true",
+    "include.schema.changes": "false",
+    "heartbeat.interval.ms": "10000",
+    "signal.data.collection": "public.debezium_signal",
+    "incremental.snapshot.chunk.size": "2"
+  }
+}
