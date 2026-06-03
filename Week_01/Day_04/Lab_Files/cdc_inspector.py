@@ -13,7 +13,7 @@ from confluent_kafka import Consumer, KafkaException
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Inspect Debezium records from a Kafka topic.")
     parser.add_argument("--topic", required=True, help="Topic to consume.")
-    parser.add_argument("--bootstrap", default="localhost:19092", help="Kafka bootstrap server.")
+    parser.add_argument("--bootstrap", default="localhost:9092", help="Kafka bootstrap server.")
     parser.add_argument("--group", default="day4-python-inspector", help="Consumer group id.")
     parser.add_argument("--max-messages", type=int, default=5, help="Stop after this many records.")
     parser.add_argument("--timeout", type=float, default=20.0, help="Total idle timeout in seconds.")
