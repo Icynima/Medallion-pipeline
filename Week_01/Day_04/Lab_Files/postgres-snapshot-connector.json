@@ -15,7 +15,7 @@
     "slot.name": "inventory_snap_slot",
     "publication.name": "inventory_snap_pub",
     "publication.autocreate.mode": "filtered",
-    "snapshot.mode": "no_data",
+    "snapshot.mode": "never",
     "tombstones.on.delete": "true",
     "include.schema.changes": "false",
     "heartbeat.interval.ms": "10000",
