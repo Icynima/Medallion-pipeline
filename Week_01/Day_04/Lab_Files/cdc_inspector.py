@@ -10,6 +10,16 @@ from typing import Any
 from confluent_kafka import Consumer, KafkaException
 
 
+OP_CODES = {
+    "c": "create",
+    "u": "update",
+    "d": "delete",
+    "r": "read/snapshot",
+    "t": "truncate",
+    "m": "message",
+}
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Inspect Debezium records from a Kafka topic.")
     parser.add_argument("--topic", required=True, help="Topic to consume.")
@@ -30,23 +40,45 @@ def decode(payload: bytes | None) -> Any:
         return text
 
 
-def summarize(value: Any) -> str:
+def describe_value(value: Any) -> dict[str, Any]:
     if value is None:
-        return "tombstone/null value"
+        return {
+            "format": "tombstone",
+            "value": None,
+        }
     if isinstance(value, dict) and "payload" in value:
         value = value["payload"]
     if isinstance(value, dict) and {"before", "after", "op"}.issubset(value.keys()):
         before = value.get("before")
         after = value.get("after")
         op = value.get("op")
+        op_label = OP_CODES.get(op, "unknown")
         table = (value.get("source") or {}).get("table")
-        return f"envelope op={op} table={table} before={before} after={after}"
+        return {
+            "format": "debezium_envelope",
+            "op_code": op,
+            "op_meaning": op_label,
+            "table": table,
+            "before": before,
+            "after": after,
+        }
     if isinstance(value, dict):
         op = value.get("__op")
+        op_label = OP_CODES.get(op, "unknown")
         table = value.get("__table")
         deleted = value.get("__deleted")
-        return f"flat op={op} table={table} deleted={deleted} value={value}"
-    return str(value)
+        return {
+            "format": "flat",
+            "op_code": op,
+            "op_meaning": op_label,
+            "table": table,
+            "deleted": deleted,
+            "value": value,
+        }
+    return {
+        "format": "raw",
+        "value": value,
+    }
 
 
 def main() -> None:
@@ -75,10 +107,13 @@ def main() -> None:
             idle = 0.0
             key = decode(msg.key())
             value = decode(msg.value())
-            print(
-                f"record partition={msg.partition()} offset={msg.offset()} "
-                f"key={key} {summarize(value)}"
-            )
+            record = {
+                "partition": msg.partition(),
+                "offset": msg.offset(),
+                "key": key,
+                "event": describe_value(value),
+            }
+            print(json.dumps(record, indent=2, default=str))
             consumed += 1
     finally:
         consumer.close()
