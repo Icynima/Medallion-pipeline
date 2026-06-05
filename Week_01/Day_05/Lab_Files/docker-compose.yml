@@ -1,5 +1,3 @@
-version: '3.8'
-
 # This docker-compose file brings up a full data ingestion stack for Day 5.
 # It includes Kafka, ZooKeeper, Kafka Connect with Debezium and Schema Registry,
 # PostgreSQL for the orders source, MySQL for the inventory source, and a
@@ -10,7 +8,6 @@ services:
   zookeeper:
     image: confluentinc/cp-zookeeper:7.5.0
     hostname: zookeeper
-    container_name: zookeeper
     ports:
       - "2181:2181"
     environment:
@@ -21,7 +18,6 @@ services:
   kafka:
     image: confluentinc/cp-kafka:7.5.0
     hostname: kafka
-    container_name: kafka
     depends_on:
       - zookeeper
     ports:
@@ -46,7 +42,6 @@ services:
   schema-registry:
     image: confluentinc/cp-schema-registry:7.5.0
     hostname: schema-registry
-    container_name: schema-registry
     depends_on:
       - kafka
     ports:
@@ -59,7 +54,6 @@ services:
   connect:
     image: debezium/connect:2.5
     hostname: connect
-    container_name: connect
     depends_on:
       - kafka
       - zookeeper
@@ -93,7 +87,6 @@ services:
   postgres:
     image: debezium/postgres:15
     hostname: postgres
-    container_name: postgres
     ports:
       - "5432:5432"
     environment:
@@ -106,7 +99,6 @@ services:
   mysql:
     image: mysql:8.0
     hostname: mysql
-    container_name: mysql
     ports:
       - "3306:3306"
     environment:
@@ -132,7 +124,6 @@ services:
   kafka-ui:
     image: provectuslabs/kafka-ui:latest
     hostname: kafka-ui
-    container_name: kafka-ui
     depends_on:
       - kafka
       - schema-registry

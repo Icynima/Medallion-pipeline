@@ -1,0 +1,23 @@
+[
+  {
+    "change": "Add optional field customer_tier with default UNKNOWN",
+    "classification": "backward_and_forward",
+    "decision": "ACCEPT",
+    "recommended_policy": "FULL",
+    "why": "Old consumers can ignore the field and new consumers can read old records because a default exists."
+  },
+  {
+    "change": "Rename order_id to id",
+    "classification": "breaking",
+    "decision": "REJECT",
+    "recommended_policy": "reject",
+    "why": "Consumers looking for order_id will fail unless aliases or a dual-write migration is planned."
+  },
+  {
+    "change": "Remove optional field coupon_code",
+    "classification": "backward",
+    "decision": "ACCEPT",
+    "recommended_policy": "BACKWARD_TRANSITIVE",
+    "why": "New consumers can read older records, but old consumers may still expect the field."
+  }
+]

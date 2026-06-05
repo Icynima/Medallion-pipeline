@@ -1,0 +1,3 @@
+order_id,order_date,customer_key,region,status,amount
+1001,2026-06-01,501,South,SHIPPED,120.50
+1002,2026-06-01,502,West,PAID,75.00

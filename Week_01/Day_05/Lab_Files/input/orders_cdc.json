@@ -1,0 +1,86 @@
+[
+  {
+    "amount": 120.5,
+    "customer_id": 501,
+    "event_id": "evt-001",
+    "op": "r",
+    "order_id": 1001,
+    "order_ts": "2026-06-01T09:15:00Z",
+    "source": "orders-db",
+    "source_lsn": 100,
+    "status": "CREATED",
+    "table": "orders"
+  },
+  {
+    "amount": 75.0,
+    "customer_id": 502,
+    "event_id": "evt-002",
+    "op": "r",
+    "order_id": 1002,
+    "order_ts": "2026-06-01T09:30:00Z",
+    "source": "orders-db",
+    "source_lsn": 101,
+    "status": "CREATED",
+    "table": "orders"
+  },
+  {
+    "amount": 42.25,
+    "customer_id": 501,
+    "event_id": "evt-003",
+    "op": "c",
+    "order_id": 1003,
+    "order_ts": "2026-06-01T10:05:00Z",
+    "source": "orders-db",
+    "source_lsn": 102,
+    "status": "CREATED",
+    "table": "orders"
+  },
+  {
+    "amount": 75.0,
+    "customer_id": 502,
+    "event_id": "evt-004",
+    "op": "u",
+    "order_id": 1002,
+    "order_ts": "2026-06-01T10:25:00Z",
+    "source": "orders-db",
+    "source_lsn": 103,
+    "status": "PAID",
+    "table": "orders"
+  },
+  {
+    "amount": 75.0,
+    "customer_id": 502,
+    "event_id": "evt-004",
+    "op": "u",
+    "order_id": 1002,
+    "order_ts": "2026-06-01T10:25:00Z",
+    "source": "orders-db",
+    "source_lsn": 103,
+    "status": "PAID",
+    "table": "orders"
+  },
+  {
+    "amount": 120.5,
+    "customer_id": 501,
+    "event_id": "evt-005",
+    "op": "u",
+    "order_id": 1001,
+    "order_ts": "2026-06-01T10:35:00Z",
+    "source": "orders-db",
+    "source_lsn": 104,
+    "status": "SHIPPED",
+    "table": "orders"
+  },
+  {
+    "amount": 42.25,
+    "customer_id": 501,
+    "event_id": "evt-006",
+    "op": "d",
+    "order_id": 1003,
+    "order_ts": "2026-06-01T11:00:00Z",
+    "source": "orders-db",
+    "source_lsn": 105,
+    "status": "CANCELLED",
+    "table": "orders"
+  }
+]

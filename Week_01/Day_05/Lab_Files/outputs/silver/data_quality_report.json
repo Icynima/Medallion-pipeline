@@ -1,0 +1,7 @@
+{
+  "dlq_records": 2,
+  "duplicate_events": 1,
+  "latest_order_lsn": 104,
+  "valid_current_orders": 2,
+  "valid_shipments": 2
+}

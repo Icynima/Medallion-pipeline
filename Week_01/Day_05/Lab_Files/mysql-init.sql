@@ -12,3 +12,6 @@ INSERT INTO inventory (product_name, quantity) VALUES
   ('Widget A', 100),
   ('Widget B', 50),
   ('Widget C', 200);
+
+GRANT SELECT, RELOAD, SHOW DATABASES, REPLICATION SLAVE, REPLICATION CLIENT ON *.* TO 'debezium'@'%';
+FLUSH PRIVILEGES;

@@ -1,0 +1,58 @@
+[
+  {
+    "topic": "northstar.orders.public.orders",
+    "partitions": 3,
+    "replication_factor": 1,
+    "key": "order_id",
+    "slide_concept": "Kafka topics, partitions, offsets, CDC",
+    "lab_exercise": "Exercises 2, 3 and optional container path"
+  },
+  {
+    "topic": "northstar.inventory.inventorydb.inventory",
+    "partitions": 3,
+    "replication_factor": 1,
+    "key": "id",
+    "slide_concept": "CDC from a second source",
+    "lab_exercise": "Optional Kafka/Debezium integration path"
+  },
+  {
+    "topic": "northstar.clickstream.events",
+    "partitions": 3,
+    "replication_factor": 1,
+    "key": "user_id",
+    "slide_concept": "Late-arriving records and event-time processing",
+    "lab_exercise": "Exercises 2 and 8"
+  },
+  {
+    "topic": "northstar.logistics.csv",
+    "partitions": 3,
+    "replication_factor": 1,
+    "key": "shipment_id",
+    "slide_concept": "Batch source ingestion and source clash",
+    "lab_exercise": "Exercises 5 and 9"
+  },
+  {
+    "topic": "northstar.logistics.avro",
+    "partitions": 3,
+    "replication_factor": 1,
+    "key": "shipment_id",
+    "slide_concept": "Schema Registry and Avro contracts",
+    "lab_exercise": "Optional Schema Registry extension"
+  },
+  {
+    "topic": "northstar.ingestion.dlq",
+    "partitions": 1,
+    "replication_factor": 1,
+    "key": "source+error",
+    "slide_concept": "Dead letter queue, quarantine and replay",
+    "lab_exercise": "Exercise 5"
+  },
+  {
+    "topic": "schema-changes.inventory",
+    "partitions": 1,
+    "replication_factor": 1,
+    "key": "table",
+    "slide_concept": "Debezium schema history",
+    "lab_exercise": "Optional Kafka/Debezium integration path"
+  }
+]

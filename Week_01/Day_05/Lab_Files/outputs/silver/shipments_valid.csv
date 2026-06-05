@@ -1,0 +1,3 @@
+shipment_id,order_id,carrier,status,event_ts
+SHP-9001,1001,BlueDart,IN_TRANSIT,2026-06-01T12:00:00Z
+SHP-9002,1002,Delhivery,DELIVERED,2026-06-01T12:10:00Z

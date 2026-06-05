@@ -1,0 +1,4 @@
+event_type,event_count
+cart_add,1
+checkout_start,1
+product_view,2

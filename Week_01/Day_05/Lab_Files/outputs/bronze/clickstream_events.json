@@ -1,0 +1,42 @@
+[
+  {
+    "_bronze_loaded_at": "2026-06-05T03:21:19.064805+00:00",
+    "_record_hash": "5b27318d959c578d",
+    "event_id": "clk-001",
+    "event_ts": "2026-06-01T09:20:00Z",
+    "event_type": "product_view",
+    "order_id": 1001,
+    "session_id": "s-1",
+    "user_id": "u-501"
+  },
+  {
+    "_bronze_loaded_at": "2026-06-05T03:21:19.064805+00:00",
+    "_record_hash": "dcb5d9d41203f073",
+    "event_id": "clk-002",
+    "event_ts": "2026-06-01T09:35:00Z",
+    "event_type": "cart_add",
+    "order_id": 1002,
+    "session_id": "s-2",
+    "user_id": "u-502"
+  },
+  {
+    "_bronze_loaded_at": "2026-06-05T03:21:19.064805+00:00",
+    "_record_hash": "4439235c3f27377f",
+    "event_id": "clk-003",
+    "event_ts": "2026-06-01T10:00:00Z",
+    "event_type": "checkout_start",
+    "order_id": 1001,
+    "session_id": "s-1",
+    "user_id": "u-501"
+  },
+  {
+    "_bronze_loaded_at": "2026-06-05T03:21:19.064805+00:00",
+    "_record_hash": "a7c8ae0d359df288",
+    "event_id": "clk-004",
+    "event_ts": "2026-06-01T08:59:00Z",
+    "event_type": "product_view",
+    "order_id": null,
+    "session_id": "s-3",
+    "user_id": "u-777"
+  }
+]

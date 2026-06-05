@@ -1,0 +1,33 @@
+[
+  {
+    "errors": [
+      "missing shipment_id",
+      "unknown order_id"
+    ],
+    "record": {
+      "_bronze_loaded_at": "2026-06-05T03:21:19.064805+00:00",
+      "_record_hash": "77798012a44be91b",
+      "carrier": "BlueDart",
+      "event_ts": "2026-06-01T12:20:00Z",
+      "order_id": "1003",
+      "shipment_id": "",
+      "status": "CREATED"
+    },
+    "source": "logistics_batch"
+  },
+  {
+    "errors": [
+      "unknown order_id"
+    ],
+    "record": {
+      "_bronze_loaded_at": "2026-06-05T03:21:19.064805+00:00",
+      "_record_hash": "79a9635ab2b54ca7",
+      "carrier": "Ekart",
+      "event_ts": "2026-06-01T12:30:00Z",
+      "order_id": "9999",
+      "shipment_id": "SHP-9004",
+      "status": "IN_TRANSIT"
+    },
+    "source": "logistics_batch"
+  }
+]
