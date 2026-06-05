@@ -8,9 +8,11 @@ import csv
 import hashlib
 import json
 import shutil
+import time
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
+from uuid import uuid4
 
 
 ROOT = Path(__file__).resolve().parent
@@ -20,6 +22,17 @@ BRONZE = OUTPUT / "bronze"
 SILVER = OUTPUT / "silver"
 GOLD = OUTPUT / "gold"
 QUARANTINE = OUTPUT / "quarantine"
+
+KAFKA_TOPICS = {
+    "orders": "northstar.orders.public.orders",
+    "clickstream": "northstar.clickstream.events",
+    "logistics": "northstar.logistics.csv",
+}
+KAFKA_TOPIC_TO_BRONZE = {
+    KAFKA_TOPICS["orders"]: BRONZE / "orders_cdc.json",
+    KAFKA_TOPICS["clickstream"]: BRONZE / "clickstream_events.json",
+    KAFKA_TOPICS["logistics"]: BRONZE / "logistics_batch.json",
+}
 
 
 def parse_ts(value: str) -> datetime:
@@ -58,30 +71,31 @@ def reset_outputs() -> None:
         path.mkdir(parents=True, exist_ok=True)
 
 
+def add_bronze_metadata(row: dict, loaded_at: str) -> dict:
+    enriched = dict(row)
+    enriched["_bronze_loaded_at"] = loaded_at
+    enriched["_record_hash"] = stable_hash(row)
+    return enriched
+
+
 def bronze_load() -> dict:
     reset_outputs()
     loaded_at = datetime.now(timezone.utc).isoformat()
 
     orders = []
     for row in read_json_records(INPUT / "orders_cdc.json"):
-        row["_bronze_loaded_at"] = loaded_at
-        row["_record_hash"] = stable_hash(row)
-        orders.append(row)
+        orders.append(add_bronze_metadata(row, loaded_at))
     write_json_records(BRONZE / "orders_cdc.json", orders)
 
     clicks = []
     for row in read_json_records(INPUT / "clickstream_events.json"):
-        row["_bronze_loaded_at"] = loaded_at
-        row["_record_hash"] = stable_hash(row)
-        clicks.append(row)
+        clicks.append(add_bronze_metadata(row, loaded_at))
     write_json_records(BRONZE / "clickstream_events.json", clicks)
 
     shipments = []
     with (INPUT / "logistics_batch.csv").open(encoding="utf-8", newline="") as f:
         for row in csv.DictReader(f):
-            row["_bronze_loaded_at"] = loaded_at
-            row["_record_hash"] = stable_hash(row)
-            shipments.append(row)
+            shipments.append(add_bronze_metadata(row, loaded_at))
     write_json_records(BRONZE / "logistics_batch.json", shipments)
 
     return {
@@ -89,6 +103,198 @@ def bronze_load() -> dict:
         "clickstream_bronze": len(clicks),
         "logistics_bronze": len(shipments),
     }
+
+
+def decode_kafka_json(raw: bytes | None) -> dict:
+    if raw is None:
+        return {}
+    payload = json.loads(raw.decode("utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError("Kafka message value must be a JSON object")
+    return payload
+
+
+def unwrap_connect_payload(value: dict) -> dict:
+    payload = value.get("payload")
+    if isinstance(payload, dict) and {"before", "after", "op"}.intersection(payload):
+        return payload
+    return value
+
+
+def normalize_order_event_from_kafka(value: dict, offset: int) -> dict | None:
+    value = unwrap_connect_payload(value)
+    if not {"before", "after", "op"}.intersection(value):
+        return value
+
+    op = value.get("op")
+    source = value.get("source") if isinstance(value.get("source"), dict) else {}
+    row = value.get("after") if op != "d" else value.get("before")
+    if not isinstance(row, dict):
+        return None
+
+    order_id = row.get("order_id", row.get("id"))
+    source_lsn = source.get("lsn") or offset
+    order_ts = row.get("order_ts") or row.get("order_date") or value.get("ts_ms")
+    if isinstance(order_ts, int):
+        order_ts = datetime.fromtimestamp(order_ts / 1000, timezone.utc).isoformat().replace("+00:00", "Z")
+
+    normalized = {
+        "amount": float(row["amount"]) if row.get("amount") is not None else 0.0,
+        "customer_id": row.get("customer_id"),
+        "event_id": f"dbz-{source_lsn}-{op}-{order_id}-{offset}",
+        "op": op,
+        "order_id": order_id,
+        "order_ts": order_ts,
+        "source": source.get("name", "orders-db"),
+        "source_lsn": source_lsn,
+        "status": row.get("status"),
+        "table": source.get("table", "orders"),
+    }
+    return normalized
+
+
+def load_file_bronze_without_reset(loaded_at: str, include_orders: bool = True) -> dict:
+    metrics = {}
+
+    if include_orders:
+        orders = [add_bronze_metadata(row, loaded_at) for row in read_json_records(INPUT / "orders_cdc.json")]
+        write_json_records(BRONZE / "orders_cdc.json", orders)
+        metrics["orders_bronze"] = len(orders)
+
+    clicks = [add_bronze_metadata(row, loaded_at) for row in read_json_records(INPUT / "clickstream_events.json")]
+    write_json_records(BRONZE / "clickstream_events.json", clicks)
+    metrics["clickstream_bronze"] = len(clicks)
+
+    shipments = []
+    with (INPUT / "logistics_batch.csv").open(encoding="utf-8", newline="") as f:
+        for row in csv.DictReader(f):
+            shipments.append(add_bronze_metadata(row, loaded_at))
+    write_json_records(BRONZE / "logistics_batch.json", shipments)
+    metrics["logistics_bronze"] = len(shipments)
+
+    return metrics
+
+
+def bronze_load_from_kafka(
+    bootstrap_servers: str = "localhost:9092",
+    group_id: str | None = None,
+    idle_timeout_seconds: float = 5.0,
+    run_id: str | None = None,
+) -> dict:
+    try:
+        from kafka import KafkaConsumer
+    except ImportError as exc:
+        raise RuntimeError("Kafka mode requires kafka-python. Install it with: pip install kafka-python") from exc
+
+    reset_outputs()
+    loaded_at = datetime.now(timezone.utc).isoformat()
+    group_id = group_id or f"day5-bronze-loader-{uuid4()}"
+    rows_by_topic = {topic: [] for topic in KAFKA_TOPIC_TO_BRONZE}
+
+    consumer = KafkaConsumer(
+        *KAFKA_TOPIC_TO_BRONZE.keys(),
+        bootstrap_servers=bootstrap_servers,
+        auto_offset_reset="earliest",
+        enable_auto_commit=False,
+        group_id=group_id,
+        key_deserializer=lambda m: m.decode("utf-8") if m else None,
+        value_deserializer=decode_kafka_json,
+        consumer_timeout_ms=500,
+    )
+    try:
+        deadline = time.monotonic() + idle_timeout_seconds
+        while time.monotonic() < deadline:
+            polled = consumer.poll(timeout_ms=500, max_records=100)
+            if not polled:
+                continue
+            deadline = time.monotonic() + idle_timeout_seconds
+            for messages in polled.values():
+                for message in messages:
+                    value = dict(message.value)
+                    message_run_id = value.pop("_lab_run_id", None)
+                    if run_id and message_run_id != run_id:
+                        continue
+                    if message.topic == KAFKA_TOPICS["orders"]:
+                        value = normalize_order_event_from_kafka(value, message.offset)
+                        if value is None:
+                            continue
+                    bronze_record = add_bronze_metadata(value, loaded_at)
+                    bronze_record["_kafka_topic"] = message.topic
+                    bronze_record["_kafka_partition"] = message.partition
+                    bronze_record["_kafka_offset"] = message.offset
+                    bronze_record["_kafka_key"] = message.key
+                    if message_run_id:
+                        bronze_record["_lab_run_id"] = message_run_id
+                    rows_by_topic[message.topic].append(bronze_record)
+    finally:
+        consumer.close()
+
+    for topic, path in KAFKA_TOPIC_TO_BRONZE.items():
+        rows = sorted(rows_by_topic[topic], key=lambda r: (r["_kafka_partition"], r["_kafka_offset"]))
+        write_json_records(path, rows)
+
+    return {
+        "orders_bronze": len(rows_by_topic[KAFKA_TOPICS["orders"]]),
+        "clickstream_bronze": len(rows_by_topic[KAFKA_TOPICS["clickstream"]]),
+        "logistics_bronze": len(rows_by_topic[KAFKA_TOPICS["logistics"]]),
+        "kafka_group_id": group_id,
+        "kafka_run_id_filter": run_id or "",
+    }
+
+
+def bronze_load_debezium_orders(
+    bootstrap_servers: str = "localhost:9092",
+    group_id: str | None = None,
+    idle_timeout_seconds: float = 5.0,
+) -> dict:
+    try:
+        from kafka import KafkaConsumer
+    except ImportError as exc:
+        raise RuntimeError("Debezium mode requires kafka-python. Install it with: pip install kafka-python") from exc
+
+    reset_outputs()
+    loaded_at = datetime.now(timezone.utc).isoformat()
+    metrics = load_file_bronze_without_reset(loaded_at, include_orders=False)
+    group_id = group_id or f"day5-debezium-orders-loader-{uuid4()}"
+    orders = []
+
+    consumer = KafkaConsumer(
+        KAFKA_TOPICS["orders"],
+        bootstrap_servers=bootstrap_servers,
+        auto_offset_reset="earliest",
+        enable_auto_commit=False,
+        group_id=group_id,
+        key_deserializer=lambda m: m.decode("utf-8") if m else None,
+        value_deserializer=decode_kafka_json,
+        consumer_timeout_ms=500,
+    )
+    try:
+        deadline = time.monotonic() + idle_timeout_seconds
+        while time.monotonic() < deadline:
+            polled = consumer.poll(timeout_ms=500, max_records=100)
+            if not polled:
+                continue
+            deadline = time.monotonic() + idle_timeout_seconds
+            for messages in polled.values():
+                for message in messages:
+                    normalized = normalize_order_event_from_kafka(dict(message.value), message.offset)
+                    if normalized is None or "dbz-" not in str(normalized.get("event_id", "")):
+                        continue
+                    bronze_record = add_bronze_metadata(normalized, loaded_at)
+                    bronze_record["_kafka_topic"] = message.topic
+                    bronze_record["_kafka_partition"] = message.partition
+                    bronze_record["_kafka_offset"] = message.offset
+                    bronze_record["_kafka_key"] = message.key
+                    orders.append(bronze_record)
+    finally:
+        consumer.close()
+
+    orders = sorted(orders, key=lambda r: (r["source_lsn"], r["_kafka_partition"], r["_kafka_offset"]))
+    write_json_records(BRONZE / "orders_cdc.json", orders)
+    metrics["orders_bronze"] = len(orders)
+    metrics["kafka_group_id"] = group_id
+    metrics["orders_source"] = "debezium"
+    return metrics
 
 
 def build_silver() -> dict:
@@ -291,16 +497,61 @@ def run_all() -> dict:
     return metrics
 
 
+def run_all_from_kafka(bootstrap_servers: str = "localhost:9092", run_id: str | None = None) -> dict:
+    metrics = {}
+    metrics.update(bronze_load_from_kafka(bootstrap_servers=bootstrap_servers, run_id=run_id))
+    metrics.update(build_silver())
+    metrics.update(build_gold())
+    metrics["schema_change_proposals"] = len(validate_schema_proposals())
+    metrics["generated_at"] = datetime.now(timezone.utc).isoformat()
+    (OUTPUT / "run_summary.json").write_text(
+        json.dumps(metrics, indent=2, sort_keys=True), encoding="utf-8"
+    )
+    return metrics
+
+
+def run_all_from_debezium_orders(bootstrap_servers: str = "localhost:9092") -> dict:
+    metrics = {}
+    metrics.update(bronze_load_debezium_orders(bootstrap_servers=bootstrap_servers))
+    metrics.update(build_silver())
+    metrics.update(build_gold())
+    metrics["schema_change_proposals"] = len(validate_schema_proposals())
+    metrics["generated_at"] = datetime.now(timezone.utc).isoformat()
+    (OUTPUT / "run_summary.json").write_text(
+        json.dumps(metrics, indent=2, sort_keys=True), encoding="utf-8"
+    )
+    return metrics
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("command", choices=["bronze", "silver", "gold", "all"])
+    parser.add_argument(
+        "command",
+        choices=["bronze", "bronze-kafka", "bronze-debezium-orders", "silver", "gold", "all", "all-kafka", "all-debezium-orders"],
+    )
+    parser.add_argument("--bootstrap-servers", default="localhost:9092")
+    parser.add_argument("--run-id", default=None, help="Only consume lab records produced with this run id")
     args = parser.parse_args()
     if args.command == "bronze":
         print(json.dumps(bronze_load(), indent=2, sort_keys=True))
+    elif args.command == "bronze-kafka":
+        print(
+            json.dumps(
+                bronze_load_from_kafka(bootstrap_servers=args.bootstrap_servers, run_id=args.run_id),
+                indent=2,
+                sort_keys=True,
+            )
+        )
+    elif args.command == "bronze-debezium-orders":
+        print(json.dumps(bronze_load_debezium_orders(bootstrap_servers=args.bootstrap_servers), indent=2, sort_keys=True))
     elif args.command == "silver":
         print(json.dumps(build_silver(), indent=2, sort_keys=True))
     elif args.command == "gold":
         print(json.dumps(build_gold(), indent=2, sort_keys=True))
+    elif args.command == "all-kafka":
+        print(json.dumps(run_all_from_kafka(bootstrap_servers=args.bootstrap_servers, run_id=args.run_id), indent=2, sort_keys=True))
+    elif args.command == "all-debezium-orders":
+        print(json.dumps(run_all_from_debezium_orders(bootstrap_servers=args.bootstrap_servers), indent=2, sort_keys=True))
     else:
         print(json.dumps(run_all(), indent=2, sort_keys=True))
 
