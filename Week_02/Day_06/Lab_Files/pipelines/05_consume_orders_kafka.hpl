@@ -15,7 +15,9 @@
     <is_key_private>N</is_key_private>
   </info>
   <notepads/>
-  <order/>
+  <order>
+    <hop><from>Consume orders.cdc</from><to>Kafka Consumer Complete</to><enabled>Y</enabled></hop>
+  </order>
   <transform>
     <name>Consume orders.cdc</name>
     <type>KafkaConsumer</type>
@@ -23,47 +25,39 @@
     <distribute>Y</distribute>
     <copies>1</copies>
     <partitioning><method>none</method><schema_name/></partitioning>
-    <keyField>
-      <kafkaName>key</kafkaName>
-      <outputName>message_key</outputName>
-      <outputType>String</outputType>
-    </keyField>
-    <messageField>
-      <kafkaName>message</kafkaName>
-      <outputName>message</outputName>
-      <outputType>String</outputType>
-    </messageField>
-    <topicField>
-      <kafkaName>topic</kafkaName>
-      <outputName>topic</outputName>
-      <outputType>String</outputType>
-    </topicField>
-    <offsetField>
-      <kafkaName>offset</kafkaName>
-      <outputName>offset</outputName>
-      <outputType>Integer</outputType>
-    </offsetField>
-    <partitionField>
-      <kafkaName>partition</kafkaName>
-      <outputName>partition</outputName>
-      <outputType>Integer</outputType>
-    </partitionField>
-    <timestampField>
-      <kafkaName>timestamp</kafkaName>
-      <outputName>kafka_timestamp</outputName>
-      <outputType>Integer</outputType>
-    </timestampField>
+    <topic>orders.cdc</topic>
+    <consumerGroup>day6-hop-lab</consumerGroup>
     <pipelinePath>${PROJECT_HOME}/pipelines/06_kafka_order_batch_subpipeline.hpl</pipelinePath>
     <batchSize>10</batchSize>
     <batchDuration>5000</batchDuration>
     <subTransform>Kafka Batch Rows</subTransform>
     <directBootstrapServers>kafka:29092</directBootstrapServers>
-    <topic>orders.cdc</topic>
-    <consumerGroup>day6-hop-lab</consumerGroup>
-    <AUTO_COMMIT>N</AUTO_COMMIT>
-    <options>
-      <option><property>auto.offset.reset</property><value>earliest</value></option>
-    </options>
+    <AUTO_COMMIT>Y</AUTO_COMMIT>
+    <OutputField kafkaName="key" type="String">message_key</OutputField>
+    <OutputField kafkaName="message" type="String">message</OutputField>
+    <OutputField kafkaName="topic" type="String">topic</OutputField>
+    <OutputField kafkaName="offset" type="Integer">offset</OutputField>
+    <OutputField kafkaName="partition" type="Integer">partition</OutputField>
+    <OutputField kafkaName="timestamp" type="Integer">kafka_timestamp</OutputField>
+    <advancedConfig>
+      <option property="auto.offset.reset" value="earliest"/>
+    </advancedConfig>
+    <GUI>
+      <xloc>120</xloc>
+      <yloc>180</yloc>
+    </GUI>
+  </transform>
+  <transform>
+    <name>Kafka Consumer Complete</name>
+    <type>Dummy</type>
+    <description>Receives rows emitted after Kafka batch processing.</description>
+    <distribute>Y</distribute>
+    <copies>1</copies>
+    <partitioning><method>none</method><schema_name/></partitioning>
+    <GUI>
+      <xloc>480</xloc>
+      <yloc>180</yloc>
+    </GUI>
   </transform>
   <transform_error_handling/>
   <attributes/>

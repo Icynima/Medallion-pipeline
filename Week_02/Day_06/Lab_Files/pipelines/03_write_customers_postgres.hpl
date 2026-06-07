@@ -26,10 +26,18 @@
     <copies>1</copies>
     <partitioning><method>none</method><schema_name/></partitioning>
     <filename>${PROJECT_HOME}/output/customers_cleaned.csv</filename>
-    <has_header>Y</has_header>
-    <has_no_empty_lines>Y</has_no_empty_lines>
-    <delimiter>,</delimiter>
+    <filename_field/>
+    <rownum_field/>
+    <include_filename>N</include_filename>
+    <separator>,</separator>
     <enclosure>"</enclosure>
+    <header>Y</header>
+    <buffer_size>50000</buffer_size>
+    <lazy_conversion>N</lazy_conversion>
+    <add_filename_result>Y</add_filename_result>
+    <parallel>N</parallel>
+    <newline_possible>N</newline_possible>
+    <encoding>UTF-8</encoding>
     <fields>
       <field><name>customer_id</name><type>Integer</type><format/><currency/><decimal_symbol>.</decimal_symbol><group_symbol>,</group_symbol><length>-1</length><precision>0</precision><trim_type>both</trim_type></field>
       <field><name>name</name><type>String</type><format/><currency/><decimal_symbol/><group_symbol/><length>-1</length><precision>-1</precision><trim_type>both</trim_type></field>
@@ -44,6 +52,10 @@
       <field><name>processed_at</name><type>Date</type><format/><currency/><decimal_symbol/><group_symbol/><length>-1</length><precision>-1</precision><trim_type>both</trim_type></field>
       <field><name>duplicate_count</name><type>Integer</type><format/><currency/><decimal_symbol>.</decimal_symbol><group_symbol>,</group_symbol><length>-1</length><precision>0</precision><trim_type>both</trim_type></field>
     </fields>
+    <GUI>
+      <xloc>120</xloc>
+      <yloc>180</yloc>
+    </GUI>
   </transform>
   <transform>
     <name>Write Customers Table</name>
@@ -74,6 +86,10 @@
       <field><column_name>duplicate_count</column_name><stream_name>duplicate_count</stream_name></field>
       <field><column_name>processed_at</column_name><stream_name>processed_at</stream_name></field>
     </fields>
+    <GUI>
+      <xloc>440</xloc>
+      <yloc>180</yloc>
+    </GUI>
   </transform>
   <transform_error_handling/>
   <attributes/>

@@ -23,8 +23,7 @@
     <hop><from>Sort By Order</from><to>Unique Orders</to><enabled>Y</enabled></hop>
     <hop><from>Unique Orders</from><to>Build Clean Event</to><enabled>Y</enabled></hop>
     <hop><from>Build Clean Event</from><to>Publish orders.cleaned</to><enabled>Y</enabled></hop>
-    <hop><from>Unique Orders</from><to>Sort By Customer</to><enabled>Y</enabled></hop>
-    <hop><from>Sort By Customer</from><to>Aggregate Customer Orders</to><enabled>Y</enabled></hop>
+    <hop><from>Publish orders.cleaned</from><to>Aggregate Customer Orders</to><enabled>Y</enabled></hop>
     <hop><from>Aggregate Customer Orders</from><to>Build Aggregate Event</to><enabled>Y</enabled></hop>
     <hop><from>Build Aggregate Event</from><to>Publish orders.customer_totals</to><enabled>Y</enabled></hop>
   </order>
@@ -43,6 +42,10 @@
       <field><name>partition</name><type>Integer</type><length>-1</length><precision>0</precision></field>
       <field><name>kafka_timestamp</name><type>Integer</type><length>-1</length><precision>0</precision></field>
     </fields>
+    <GUI>
+      <xloc>80</xloc>
+      <yloc>240</yloc>
+    </GUI>
   </transform>
   <transform>
     <name>Parse Event JSON</name>
@@ -75,6 +78,10 @@ var event_time = event.event_time == null ? "" : String(event.event_time);
       <field><name>amount</name><rename>amount</rename><type>Number</type><length>-1</length><precision>2</precision><replace>N</replace></field>
       <field><name>event_time</name><rename>event_time</rename><type>String</type><length>-1</length><precision>-1</precision><replace>N</replace></field>
     </fields>
+    <GUI>
+      <xloc>300</xloc>
+      <yloc>240</yloc>
+    </GUI>
   </transform>
   <transform>
     <name>Keep NEW Events</name>
@@ -87,14 +94,20 @@ var event_time = event.event_time == null ? "" : String(event.event_time);
     <send_false_to>Ignored Events</send_false_to>
     <compare>
       <condition>
-        <negated>N</negated>
-        <leftValueType>FIELD</leftValueType>
-        <leftValue>status</leftValue>
+        <conditions>
+</conditions>
         <function>=</function>
-        <rightValueType>STRING</rightValueType>
-        <rightValue>NEW</rightValue>
+        <leftvalue>status</leftvalue>
+        <rightvalue/>
+        <value><name>constant</name><type>String</type><text>NEW</text><length>-1</length><precision>-1</precision><isnull>N</isnull><mask/></value>
+        <negated>N</negated>
+        <operator>-</operator>
       </condition>
     </compare>
+    <GUI>
+      <xloc>540</xloc>
+      <yloc>240</yloc>
+    </GUI>
   </transform>
   <transform>
     <name>Ignored Events</name>
@@ -103,6 +116,10 @@ var event_time = event.event_time == null ? "" : String(event.event_time);
     <distribute>Y</distribute>
     <copies>1</copies>
     <partitioning><method>none</method><schema_name/></partitioning>
+    <GUI>
+      <xloc>780</xloc>
+      <yloc>400</yloc>
+    </GUI>
   </transform>
   <transform>
     <name>Sort By Order</name>
@@ -117,6 +134,10 @@ var event_time = event.event_time == null ? "" : String(event.event_time);
     <fields>
       <field><name>order_id</name><ascending>Y</ascending><case_sensitive>N</case_sensitive></field>
     </fields>
+    <GUI>
+      <xloc>780</xloc>
+      <yloc>160</yloc>
+    </GUI>
   </transform>
   <transform>
     <name>Unique Orders</name>
@@ -130,6 +151,10 @@ var event_time = event.event_time == null ? "" : String(event.event_time);
     <fields>
       <field><name>order_id</name></field>
     </fields>
+    <GUI>
+      <xloc>1020</xloc>
+      <yloc>160</yloc>
+    </GUI>
   </transform>
   <transform>
     <name>Build Clean Event</name>
@@ -152,12 +177,18 @@ var clean_message = JSON.stringify({
   amount: amount,
   event_time: event_time
 });
+var order_key = String(order_id);
         ]]></jsScript_script>
       </jsScript>
     </jsScripts>
     <fields>
       <field><name>clean_message</name><rename>clean_message</rename><type>String</type><length>-1</length><precision>-1</precision><replace>N</replace></field>
+      <field><name>order_key</name><rename>order_key</rename><type>String</type><length>-1</length><precision>-1</precision><replace>N</replace></field>
     </fields>
+    <GUI>
+      <xloc>1260</xloc>
+      <yloc>160</yloc>
+    </GUI>
   </transform>
   <transform>
     <name>Publish orders.cleaned</name>
@@ -169,44 +200,36 @@ var clean_message = JSON.stringify({
     <directBootstrapServers>kafka:29092</directBootstrapServers>
     <clientId>hop-day6-cleaned-orders</clientId>
     <topic>orders.cleaned</topic>
-    <keyField>order_id</keyField>
+    <keyField>order_key</keyField>
     <messageField>clean_message</messageField>
-    <options>
-      <option><property>acks</property><value>all</value></option>
-    </options>
-  </transform>
-  <transform>
-    <name>Sort By Customer</name>
-    <type>SortRows</type>
-    <description>Sort cleaned orders before customer aggregation.</description>
-    <distribute>N</distribute>
-    <copies>1</copies>
-    <partitioning><method>none</method><schema_name/></partitioning>
-    <directory>${PROJECT_HOME}/output</directory>
-    <prefix>sort_kafka_customers</prefix>
-    <sort_size>1000000</sort_size>
-    <fields>
-      <field><name>customer_id</name><ascending>Y</ascending><case_sensitive>N</case_sensitive></field>
-    </fields>
+    <advancedConfig>
+      <option property="acks" value="all"/>
+    </advancedConfig>
+    <GUI>
+      <xloc>1520</xloc>
+      <yloc>160</yloc>
+    </GUI>
   </transform>
   <transform>
     <name>Aggregate Customer Orders</name>
-    <type>GroupBy</type>
+    <type>MemoryGroupBy</type>
     <description>Aggregate cleaned events by customer inside the Kafka batch.</description>
     <distribute>Y</distribute>
     <copies>1</copies>
     <partitioning><method>none</method><schema_name/></partitioning>
-    <pass_all_rows>N</pass_all_rows>
-    <ignore_aggregate>N</ignore_aggregate>
-    <fields_in_group>
+    <give_back_row>N</give_back_row>
+    <group>
       <field><name>customer_id</name></field>
-    </fields_in_group>
-    <aggregate_ignoremissing>N</aggregate_ignoremissing>
+    </group>
     <fields>
-      <field><aggregate>order_count</aggregate><subject>order_id</subject><type>COUNT</type><valuefield/></field>
+      <field><aggregate>order_count</aggregate><subject>order_id</subject><type>COUNT_ALL</type><valuefield/></field>
       <field><aggregate>total_amount</aggregate><subject>amount</subject><type>SUM</type><valuefield/></field>
       <field><aggregate>average_amount</aggregate><subject>amount</subject><type>AVERAGE</type><valuefield/></field>
     </fields>
+    <GUI>
+      <xloc>1780</xloc>
+      <yloc>160</yloc>
+    </GUI>
   </transform>
   <transform>
     <name>Build Aggregate Event</name>
@@ -227,12 +250,18 @@ var aggregate_message = JSON.stringify({
   total_amount: total_amount,
   average_amount: average_amount
 });
+var customer_key = String(customer_id);
         ]]></jsScript_script>
       </jsScript>
     </jsScripts>
     <fields>
       <field><name>aggregate_message</name><rename>aggregate_message</rename><type>String</type><length>-1</length><precision>-1</precision><replace>N</replace></field>
+      <field><name>customer_key</name><rename>customer_key</rename><type>String</type><length>-1</length><precision>-1</precision><replace>N</replace></field>
     </fields>
+    <GUI>
+      <xloc>2040</xloc>
+      <yloc>160</yloc>
+    </GUI>
   </transform>
   <transform>
     <name>Publish orders.customer_totals</name>
@@ -244,11 +273,15 @@ var aggregate_message = JSON.stringify({
     <directBootstrapServers>kafka:29092</directBootstrapServers>
     <clientId>hop-day6-customer-totals</clientId>
     <topic>orders.customer_totals</topic>
-    <keyField>customer_id</keyField>
+    <keyField>customer_key</keyField>
     <messageField>aggregate_message</messageField>
-    <options>
-      <option><property>acks</property><value>all</value></option>
-    </options>
+    <advancedConfig>
+      <option property="acks" value="all"/>
+    </advancedConfig>
+    <GUI>
+      <xloc>2320</xloc>
+      <yloc>160</yloc>
+    </GUI>
   </transform>
   <transform_error_handling/>
   <attributes/>

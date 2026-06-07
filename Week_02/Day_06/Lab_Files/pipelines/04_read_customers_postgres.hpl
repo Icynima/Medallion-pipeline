@@ -32,6 +32,10 @@
     <execute_each_row>N</execute_each_row>
     <variables_active>N</variables_active>
     <lazy_conversion_active>N</lazy_conversion_active>
+    <GUI>
+      <xloc>120</xloc>
+      <yloc>180</yloc>
+    </GUI>
   </transform>
   <transform>
     <name>Database Read CSV</name>
@@ -42,14 +46,38 @@
     <partitioning><method>none</method><schema_name/></partitioning>
     <separator>,</separator>
     <enclosure>"</enclosure>
+    <enclosure_forced>N</enclosure_forced>
+    <enclosure_fix_disabled>N</enclosure_fix_disabled>
     <header>Y</header>
+    <footer>N</footer>
     <format>DOS</format>
     <compression>None</compression>
     <encoding>UTF-8</encoding>
-    <file_name_base>${PROJECT_HOME}/output/postgres_customers_de</file_name_base>
-    <file_name_extension>csv</file_name_extension>
-    <add_to_result_filenames>Y</add_to_result_filenames>
+    <endedLine/>
+    <fileNameInField>N</fileNameInField>
+    <fileNameField/>
     <create_parent_folder>Y</create_parent_folder>
+    <file>
+      <name>${PROJECT_HOME}/output/postgres_customers_de</name>
+      <servlet_output>N</servlet_output>
+      <do_not_open_new_file_init>N</do_not_open_new_file_init>
+      <extention>csv</extention>
+      <append>N</append>
+      <split>N</split>
+      <haspartno>N</haspartno>
+      <add_date>N</add_date>
+      <add_time>N</add_time>
+      <SpecifyFormat>N</SpecifyFormat>
+      <date_time_format/>
+      <add_to_result_filenames>Y</add_to_result_filenames>
+      <pad>N</pad>
+      <fast_dump>N</fast_dump>
+      <splitevery/>
+    </file>
+    <GUI>
+      <xloc>460</xloc>
+      <yloc>180</yloc>
+    </GUI>
   </transform>
   <transform_error_handling/>
   <attributes/>

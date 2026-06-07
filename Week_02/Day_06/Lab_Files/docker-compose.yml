@@ -63,12 +63,28 @@ services:
   hop-web:
     image: apache/hop-web:latest
     container_name: day6-hop-web
+    user: "${HOP_CONTAINER_USER:-0:0}"
     ports:
       - "8082:8080"
     environment:
       HOP_LOG_LEVEL: Basic
       HOP_PROJECT_NAME: day6_hop_lab
       HOP_PROJECT_FOLDER: /project
+    command:
+      - /bin/bash
+      - -lc
+      - |
+        /tmp/run-web.sh &
+        web_pid="$$!"
+        (
+          while kill -0 "$${web_pid}" 2>/dev/null; do
+            if "$${DEPLOYMENT_PATH}/hop-conf.sh" -pl 2>/dev/null | grep -q "^  $${HOP_PROJECT_NAME} :"; then
+              "$${DEPLOYMENT_PATH}/hop-conf.sh" --default-project="$${HOP_PROJECT_NAME}" >/tmp/day6-default-project.log 2>&1 || true
+            fi
+            sleep 5
+          done
+        ) &
+        wait "$${web_pid}"
     volumes:
       - ./:/project:rw
     depends_on:
@@ -82,6 +98,7 @@ services:
   hop-cli:
     image: apache/hop:latest
     container_name: day6-hop-cli
+    user: "${HOP_CONTAINER_USER:-0:0}"
     profiles:
       - cli
     working_dir: /project

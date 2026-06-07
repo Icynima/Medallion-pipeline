@@ -26,16 +26,27 @@
     <copies>1</copies>
     <partitioning><method>none</method><schema_name/></partitioning>
     <filename>${PROJECT_HOME}/data/first_pipeline_source.csv</filename>
-    <has_header>Y</has_header>
-    <has_no_empty_lines>Y</has_no_empty_lines>
-    <delimiter>,</delimiter>
+    <filename_field/>
+    <rownum_field/>
+    <include_filename>N</include_filename>
+    <separator>,</separator>
     <enclosure>"</enclosure>
-    <escape_char/>
+    <header>Y</header>
+    <buffer_size>50000</buffer_size>
+    <lazy_conversion>N</lazy_conversion>
+    <add_filename_result>Y</add_filename_result>
+    <parallel>N</parallel>
+    <newline_possible>N</newline_possible>
+    <encoding>UTF-8</encoding>
     <fields>
       <field><name>customer_id</name><type>Integer</type><format/><currency/><decimal_symbol>.</decimal_symbol><group_symbol>,</group_symbol><length>-1</length><precision>0</precision><trim_type>both</trim_type></field>
       <field><name>customer_name</name><type>String</type><format/><currency/><decimal_symbol/><group_symbol/><length>-1</length><precision>-1</precision><trim_type>both</trim_type></field>
       <field><name>city</name><type>String</type><format/><currency/><decimal_symbol/><group_symbol/><length>-1</length><precision>-1</precision><trim_type>both</trim_type></field>
     </fields>
+    <GUI>
+      <xloc>120</xloc>
+      <yloc>180</yloc>
+    </GUI>
   </transform>
   <transform>
     <name>Text file output</name>
@@ -47,19 +58,37 @@
     <separator>,</separator>
     <enclosure>"</enclosure>
     <enclosure_forced>N</enclosure_forced>
+    <enclosure_fix_disabled>N</enclosure_fix_disabled>
     <header>Y</header>
     <footer>N</footer>
     <format>DOS</format>
     <compression>None</compression>
     <encoding>UTF-8</encoding>
+    <endedLine/>
     <fileNameInField>N</fileNameInField>
-    <file_name_base>${PROJECT_HOME}/output/first_pipeline_result</file_name_base>
-    <file_name_extension>csv</file_name_extension>
-    <add_date>N</add_date>
-    <add_time>N</add_time>
-    <SpecifyFormat>N</SpecifyFormat>
-    <add_to_result_filenames>Y</add_to_result_filenames>
+    <fileNameField/>
     <create_parent_folder>Y</create_parent_folder>
+    <file>
+      <name>${PROJECT_HOME}/output/first_pipeline_result</name>
+      <servlet_output>N</servlet_output>
+      <do_not_open_new_file_init>N</do_not_open_new_file_init>
+      <extention>csv</extention>
+      <append>N</append>
+      <split>N</split>
+      <haspartno>N</haspartno>
+      <add_date>N</add_date>
+      <add_time>N</add_time>
+      <SpecifyFormat>N</SpecifyFormat>
+      <date_time_format/>
+      <add_to_result_filenames>Y</add_to_result_filenames>
+      <pad>N</pad>
+      <fast_dump>N</fast_dump>
+      <splitevery/>
+    </file>
+    <GUI>
+      <xloc>420</xloc>
+      <yloc>180</yloc>
+    </GUI>
   </transform>
   <transform_error_handling/>
   <attributes/>
