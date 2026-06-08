@@ -91,18 +91,43 @@ Open MinIO Console:
 
 The bucket should be `day7-lakehouse`. It should contain `bronze/`, `silver/`, `gold/`, `quarantine/`, and `incremental/` paths. The copy excludes local Spark `.crc` side files so the bucket is easier to inspect.
 
-## Windows PowerShell Notes
+## Windows Command Prompt Notes
 
-Use the same Docker commands from `Week_02\Day_07\Lab_Files`. Replace the cleanup command with:
+Use Windows Command Prompt (`cmd.exe`). Start from the repository root:
 
-```powershell
-Remove-Item -Recurse -Force data, lake, output, state, run_logs -ErrorAction SilentlyContinue
+```bat
+cd Week_02\Day_07\Lab_Files
+docker compose -p day7_lab down -v --remove-orphans
+if exist data rmdir /s /q data
+if exist lake rmdir /s /q lake
+if exist output rmdir /s /q output
+if exist state rmdir /s /q state
+if exist run_logs rmdir /s /q run_logs
+python generate_data.py
+docker compose -p day7_lab up -d spark-master spark-worker
 ```
 
-Then run:
+Run the labs from the same Command Prompt:
 
-```powershell
-python generate_data.py
+```bat
 python run_lab.py --list
 python run_lab.py 01
+python run_lab.py 02
+python run_lab.py 03
+python run_lab.py 04
+python run_lab.py 05
+python run_lab.py 06
+python run_lab.py 07
+python run_lab.py 08
+python run_lab.py 09
+python run_lab.py 10
+python run_lab.py 11
+python run_lab.py 12
+```
+
+Mirror the lakehouse to MinIO from Command Prompt:
+
+```bat
+docker compose -p day7_lab up -d minio
+docker compose -p day7_lab --profile object-store run --rm mc
 ```
