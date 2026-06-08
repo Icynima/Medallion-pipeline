@@ -1,8 +1,12 @@
-from pyspark.sql import SparkSession
-from pyspark.sql.functions import expr
+from __future__ import annotations
 
-spark = SparkSession.builder.appName('BronzeToSilver').getOrCreate()
-# Example schema inference omitted for brevity
-bronze_df = spark.readStream.format('iceberg').option('path','s3a://bronze/orders_bronze').load()
-clean_df = bronze_df.withColumn('event_time_ts', expr('to_timestamp(event_time)')).dropDuplicates(['order_id'])
-clean_df.writeStream.format('iceberg').option('checkpointLocation','/tmp/chk/orders_silver').option('path','s3a://silver/orders_silver').outputMode('append').start().awaitTermination()
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent / "labs"))
+
+from lab_06_silver_cleaning_and_standardization import main
+
+
+if __name__ == "__main__":
+    main()

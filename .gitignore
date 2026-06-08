@@ -183,6 +183,10 @@ cython_debug/
 # Lab runtime artifacts
 Week_*/Day_*/Lab_Files/data/
 Week_*/Day_*/Lab_Files/logs/
+Week_*/Day_*/Lab_Files/lake/
+Week_*/Day_*/Lab_Files/output/
+Week_*/Day_*/Lab_Files/state/
+Week_*/Day_*/Lab_Files/warehouse/
 Week_*/Day_*/Lab_Files/out/tight/
 Week_*/Day_*/Lab/*.bak
 *.docx.bak
