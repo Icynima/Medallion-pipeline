@@ -17,6 +17,8 @@ services:
     ports:
       - "7077:7077"
       - "8081:8080"
+    volumes:
+      - ./:/workspace:rw
     networks:
       - day7-lab
 
@@ -39,6 +41,8 @@ services:
       ]
     ports:
       - "8083:8081"
+    volumes:
+      - ./:/workspace:rw
     networks:
       - day7-lab
 
@@ -81,7 +85,8 @@ services:
     command: >
       "mc alias set local http://minio:9000 minioadmin minioadmin &&
        mc mb --ignore-existing local/day7-lakehouse &&
-       mc cp --recursive /workspace/lake/ local/day7-lakehouse/"
+       mc rm --recursive --force local/day7-lakehouse || true &&
+       mc mirror --overwrite --exclude '*.crc' /workspace/lake/ local/day7-lakehouse/"
     profiles:
       - object-store
     networks:

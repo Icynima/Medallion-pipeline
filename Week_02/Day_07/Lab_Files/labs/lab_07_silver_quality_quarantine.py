@@ -22,7 +22,11 @@ def main() -> None:
     summary = checked.groupBy("is_valid").count().orderBy("is_valid")
     write_csv_dir(summary, OUTPUT_DIR / "lab_07_quality_summary")
     write_csv_dir(
-        invalid.select("event_id", "order_id", "quality_errors").orderBy("event_id"),
+        invalid.select(
+            "event_id",
+            "order_id",
+            F.concat_ws("|", F.col("quality_errors")).alias("quality_errors"),
+        ).orderBy("event_id"),
         OUTPUT_DIR / "lab_07_quarantine_preview",
     )
 
