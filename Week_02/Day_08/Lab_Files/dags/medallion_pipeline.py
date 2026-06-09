@@ -1,27 +1,20 @@
 """
-Medallion pipeline DAG for Day 8 lab
------------------------------------
+DAG 03 – Medallion Pipeline (Bronze → Silver → Gold)
+=====================================================
+Lab 3: Full medallion architecture in Airflow with FileSensor,
+PythonOperator, XCom data passing, and PostgreSQL writes.
 
-This DAG demonstrates how to orchestrate a simple medallion pipeline in
-Apache Airflow.  It contains three Python tasks that progressively
-upgrade data from a Bronze table to Silver and then Gold.  A file
-sensor waits for a CSV input file to arrive in the container's data
-directory.  Once the file is present, the DAG loads the raw data into
-the Bronze table, transforms and aggregates it, then writes the
-results to Silver and Gold tables.  The transformation and loading
-logic are deliberately simple so learners can focus on orchestration
-concepts (scheduling, sensors, XComs, etc.).
-
-Before running this DAG, ensure you have a CSV file at
-``/opt/airflow/data/new_orders.csv`` containing columns ``order_id``,
-``customer_id``, ``order_date``, ``quantity`` and ``total_amount``.
-Airflow will automatically create the tables ``bronze_orders``,
-``silver_orders`` and ``gold_order_summary`` in the PostgreSQL
-database if they do not already exist.
+Concepts:
+  - FileSensor (reschedule mode)
+  - PythonOperator with **context
+  - XCom push/pull for metadata tracking
+  - SQL DDL/DML from Python
+  - Pipeline execution logging
 """
 
 import csv
-from datetime import datetime
+import os
+from datetime import datetime, timedelta
 from decimal import Decimal
 
 from airflow import DAG
@@ -30,129 +23,301 @@ from airflow.sensors.filesystem import FileSensor
 from airflow.utils.dates import days_ago
 from sqlalchemy import create_engine, text
 
-# Define a connection string to the Postgres database used by Airflow.
-# In docker-compose.yml, the metadata database is available at
-# postgres:5432 with user/password airflow.  We reuse the same
-# database for storing our Bronze/Silver/Gold tables for the purposes
-# of this lab.  In production you would typically separate your
-# metadata and data storage.
-PG_CONN = 'postgresql+psycopg2://airflow:airflow@postgres:5432/airflow'
+PG_CONN = os.environ.get(
+    "WAREHOUSE_CONN",
+    "postgresql+psycopg2://airflow:airflow@postgres:5432/airflow",
+)
 
-def load_bronze(**context):
-    """Read the raw CSV file and append it to the bronze_orders table."""
-    file_path = '/opt/airflow/data/new_orders.csv'
+
+# ── Task functions ────────────────────────────────────────────
+
+def load_bronze_orders(**context):
+    """Read raw CSV and INSERT into bronze_orders (append-only)."""
+    file_path = "/opt/airflow/data/new_orders.csv"
     engine = create_engine(PG_CONN)
-    with open(file_path, newline='', encoding='utf-8') as handle:
-        rows = [
-            {key.lower(): value for key, value in row.items()}
-            for row in csv.DictReader(handle)
-        ]
+
+    with open(file_path, newline="", encoding="utf-8") as fh:
+        rows = [{k.lower(): v for k, v in row.items()} for row in csv.DictReader(fh)]
 
     with engine.begin() as conn:
-        conn.execute(text("""
-            CREATE TABLE IF NOT EXISTS bronze_orders (
-                order_id INTEGER,
-                customer_id INTEGER,
-                order_date TEXT,
-                quantity INTEGER,
-                total_amount NUMERIC
-            )
-        """))
         for row in rows:
             conn.execute(
                 text("""
                     INSERT INTO bronze_orders
-                    (order_id, customer_id, order_date, quantity, total_amount)
-                    VALUES (:order_id, :customer_id, :order_date, :quantity, :total_amount)
+                        (order_id, customer_id, product_id, product_name,
+                         category, quantity, unit_price, total_amount,
+                         order_date, status, source)
+                    VALUES
+                        (:order_id, :customer_id, :product_id, :product_name,
+                         :category, :quantity, :unit_price, :total_amount,
+                         :order_date, :status, 'csv')
                 """),
                 {
-                    'order_id': int(row['order_id']),
-                    'customer_id': int(row['customer_id']),
-                    'order_date': row['order_date'],
-                    'quantity': int(row['quantity']),
-                    'total_amount': Decimal(row['total_amount']),
+                    "order_id": int(row["order_id"]),
+                    "customer_id": int(row["customer_id"]),
+                    "product_id": row["product_id"],
+                    "product_name": row["product_name"],
+                    "category": row["category"],
+                    "quantity": int(row["quantity"]),
+                    "unit_price": Decimal(row["unit_price"]),
+                    "total_amount": Decimal(row["total_amount"]),
+                    "order_date": row["order_date"],
+                    "status": row["status"],
                 },
             )
-    context['ti'].xcom_push(key='records_loaded', value=len(rows))
+    context["ti"].xcom_push(key="bronze_count", value=len(rows))
+    return f"Loaded {len(rows)} rows into bronze_orders"
 
-def transform_silver(**context):
-    """Transform bronze_orders into a cleansed silver_orders table."""
+
+def load_bronze_customers(**context):
+    """Read customers CSV into bronze_customers."""
+    file_path = "/opt/airflow/data/customers.csv"
+    engine = create_engine(PG_CONN)
+
+    with open(file_path, newline="", encoding="utf-8") as fh:
+        rows = [{k.lower(): v for k, v in row.items()} for row in csv.DictReader(fh)]
+
+    with engine.begin() as conn:
+        for row in rows:
+            conn.execute(
+                text("""
+                    INSERT INTO bronze_customers
+                        (customer_id, customer_name, email, city, country, signup_date)
+                    VALUES
+                        (:customer_id, :customer_name, :email, :city, :country, :signup_date)
+                """),
+                {
+                    "customer_id": int(row["customer_id"]),
+                    "customer_name": row["customer_name"],
+                    "email": row.get("email", ""),
+                    "city": row["city"],
+                    "country": row["country"],
+                    "signup_date": row["signup_date"],
+                },
+            )
+    context["ti"].xcom_push(key="customers_count", value=len(rows))
+    return f"Loaded {len(rows)} rows into bronze_customers"
+
+
+def transform_silver_orders(**context):
+    """Cleanse and deduplicate bronze → silver_orders."""
     engine = create_engine(PG_CONN)
     with engine.begin() as conn:
-        conn.execute(text("DROP TABLE IF EXISTS silver_orders"))
+        conn.execute(text("DELETE FROM silver_orders"))
         conn.execute(text("""
-            CREATE TABLE silver_orders AS
-            SELECT
-                order_id,
-                customer_id,
-                TO_DATE(order_date, 'YYYY-MM-DD') AS order_date,
-                quantity,
-                total_amount
+            INSERT INTO silver_orders
+                (order_id, customer_id, product_id, product_name,
+                 category, quantity, unit_price, total_amount, order_date, status)
+            SELECT DISTINCT ON (order_id)
+                order_id, customer_id, product_id, product_name,
+                category, quantity, unit_price, total_amount,
+                TO_DATE(order_date, 'YYYY-MM-DD'), status
             FROM bronze_orders
             WHERE quantity > 0
+              AND status != 'CANCELLED'
+            ORDER BY order_id, _loaded_at DESC
         """))
-        silver_rows = conn.execute(text("SELECT COUNT(*) FROM silver_orders")).scalar_one()
-    context['ti'].xcom_push(key='silver_rows', value=silver_rows)
+        count = conn.execute(text("SELECT COUNT(*) FROM silver_orders")).scalar_one()
+    context["ti"].xcom_push(key="silver_count", value=count)
+    return f"Silver orders: {count} rows"
 
-def aggregate_gold(**context):
-    """Aggregate silver_orders to create a gold summary table."""
+
+def transform_silver_customers(**context):
+    """Cleanse bronze → silver_customers."""
     engine = create_engine(PG_CONN)
     with engine.begin() as conn:
-        conn.execute(text("DROP TABLE IF EXISTS gold_order_summary"))
+        conn.execute(text("DELETE FROM silver_customers"))
         conn.execute(text("""
-            CREATE TABLE gold_order_summary AS
-            SELECT
+            INSERT INTO silver_customers
+                (customer_id, customer_name, email, city, country, signup_date)
+            SELECT DISTINCT ON (customer_id)
                 customer_id,
-                SUM(total_amount) AS total_spent,
-                COUNT(*) AS order_count,
-                MAX(:processed_at) AS processed_at
+                INITCAP(TRIM(customer_name)),
+                LOWER(TRIM(email)),
+                TRIM(city),
+                UPPER(TRIM(country)),
+                TO_DATE(signup_date, 'YYYY-MM-DD')
+            FROM bronze_customers
+            WHERE customer_name IS NOT NULL AND customer_name != ''
+            ORDER BY customer_id, _loaded_at DESC
+        """))
+        count = conn.execute(text("SELECT COUNT(*) FROM silver_customers")).scalar_one()
+    context["ti"].xcom_push(key="silver_customers", value=count)
+
+
+def build_gold_customer_360(**context):
+    """Join orders + customers to build a customer 360 gold table."""
+    engine = create_engine(PG_CONN)
+    with engine.begin() as conn:
+        conn.execute(text("DELETE FROM gold_customer_360"))
+        conn.execute(text("""
+            INSERT INTO gold_customer_360
+                (customer_id, customer_name, email, city, country,
+                 total_orders, total_revenue, avg_order_value,
+                 first_order_date, last_order_date, top_category, customer_segment)
+            SELECT
+                c.customer_id,
+                c.customer_name,
+                c.email,
+                c.city,
+                c.country,
+                COUNT(o.order_id)                         AS total_orders,
+                COALESCE(SUM(o.total_amount), 0)          AS total_revenue,
+                COALESCE(AVG(o.total_amount), 0)          AS avg_order_value,
+                MIN(o.order_date)                         AS first_order_date,
+                MAX(o.order_date)                         AS last_order_date,
+                MODE() WITHIN GROUP (ORDER BY o.category) AS top_category,
+                CASE
+                    WHEN SUM(o.total_amount) >= 200 THEN 'Premium'
+                    WHEN SUM(o.total_amount) >= 50  THEN 'Regular'
+                    ELSE 'New'
+                END                                       AS customer_segment
+            FROM silver_customers c
+            LEFT JOIN silver_orders o ON c.customer_id = o.customer_id
+            GROUP BY c.customer_id, c.customer_name, c.email, c.city, c.country
+        """))
+        count = conn.execute(
+            text("SELECT COUNT(*) FROM gold_customer_360")
+        ).scalar_one()
+    context["ti"].xcom_push(key="gold_360_count", value=count)
+
+
+def build_gold_daily_sales(**context):
+    """Aggregate daily sales from silver_orders."""
+    engine = create_engine(PG_CONN)
+    with engine.begin() as conn:
+        conn.execute(text("DELETE FROM gold_daily_sales"))
+        conn.execute(text("""
+            INSERT INTO gold_daily_sales
+                (order_date, total_orders, total_revenue,
+                 unique_customers, avg_order_value, top_product)
+            SELECT
+                order_date,
+                COUNT(*)                                            AS total_orders,
+                SUM(total_amount)                                   AS total_revenue,
+                COUNT(DISTINCT customer_id)                         AS unique_customers,
+                AVG(total_amount)                                   AS avg_order_value,
+                MODE() WITHIN GROUP (ORDER BY product_name)         AS top_product
             FROM silver_orders
-            GROUP BY customer_id
-        """), {'processed_at': datetime.utcnow()})
-        gold_rows = conn.execute(text("SELECT COUNT(*) FROM gold_order_summary")).scalar_one()
-    context['ti'].xcom_push(key='gold_rows', value=gold_rows)
+            GROUP BY order_date
+            ORDER BY order_date
+        """))
+        count = conn.execute(
+            text("SELECT COUNT(*) FROM gold_daily_sales")
+        ).scalar_one()
+    context["ti"].xcom_push(key="gold_daily_count", value=count)
+
+
+def log_pipeline_result(**context):
+    """Write a summary record to pipeline_execution_log."""
+    engine = create_engine(PG_CONN)
+    ti = context["ti"]
+    bronze = ti.xcom_pull(task_ids="load_bronze_orders", key="bronze_count") or 0
+    silver = ti.xcom_pull(task_ids="transform_silver_orders", key="silver_count") or 0
+    gold = ti.xcom_pull(task_ids="build_gold_customer_360", key="gold_360_count") or 0
+
+    with engine.begin() as conn:
+        conn.execute(
+            text("""
+                INSERT INTO pipeline_execution_log
+                    (dag_id, run_id, task_id, layer, table_name,
+                     records_processed, status, started_at)
+                VALUES
+                    (:dag_id, :run_id, 'summary', 'all', 'medallion',
+                     :total, 'success', :ts)
+            """),
+            {
+                "dag_id": context["dag"].dag_id,
+                "run_id": context["run_id"],
+                "total": bronze + silver + gold,
+                "ts": datetime.utcnow(),
+            },
+        )
+    print(f"Pipeline complete: bronze={bronze}, silver={silver}, gold={gold}")
+
+
+# ── DAG definition ────────────────────────────────────────────
 
 default_args = {
-    'owner': 'data-engineer',
-    'depends_on_past': False,
-    'email_on_failure': False,
-    'email_on_retry': False,
-    'retries': 0
+    "owner": "data-engineer",
+    "depends_on_past": False,
+    "email_on_failure": False,
+    "retries": 1,
+    "retry_delay": timedelta(minutes=2),
 }
 
 with DAG(
-    dag_id='medallion_pipeline',
-    description='Orchestrate Bronze->Silver->Gold pipeline using Airflow',
-    schedule_interval='@daily',
+    dag_id="03_medallion_pipeline",
+    description="Full Bronze → Silver → Gold medallion pipeline",
+    schedule_interval="@daily",
     start_date=days_ago(1),
     catchup=False,
     default_args=default_args,
-    tags=['lab', 'medallion']
+    tags=["lab", "medallion", "core"],
+    doc_md=__doc__,
 ) as dag:
-    # Wait for the file to arrive.  We set ``poke_interval`` low to
-    # reduce latency in this lab; in production adjust this based on
-    # expected arrival frequency.  The sensor times out after 1 hour.
-    wait_for_csv = FileSensor(
-        task_id='wait_for_csv',
-        filepath='/opt/airflow/data/new_orders.csv',
+
+    # ── Sensors ───────────────────────────────────────────────
+    wait_orders = FileSensor(
+        task_id="wait_for_orders_csv",
+        filepath="/opt/airflow/data/new_orders.csv",
         poke_interval=10,
-        timeout=60 * 60,
-        mode='reschedule'
+        timeout=600,
+        mode="reschedule",
     )
 
-    load_bronze_task = PythonOperator(
-        task_id='load_bronze',
-        python_callable=load_bronze
+    wait_customers = FileSensor(
+        task_id="wait_for_customers_csv",
+        filepath="/opt/airflow/data/customers.csv",
+        poke_interval=10,
+        timeout=600,
+        mode="reschedule",
     )
 
-    transform_silver_task = PythonOperator(
-        task_id='transform_silver',
-        python_callable=transform_silver
+    # ── Bronze layer ──────────────────────────────────────────
+    bronze_orders = PythonOperator(
+        task_id="load_bronze_orders",
+        python_callable=load_bronze_orders,
     )
 
-    aggregate_gold_task = PythonOperator(
-        task_id='aggregate_gold',
-        python_callable=aggregate_gold
+    bronze_customers = PythonOperator(
+        task_id="load_bronze_customers",
+        python_callable=load_bronze_customers,
     )
 
-    wait_for_csv >> load_bronze_task >> transform_silver_task >> aggregate_gold_task
+    # ── Silver layer ──────────────────────────────────────────
+    silver_orders = PythonOperator(
+        task_id="transform_silver_orders",
+        python_callable=transform_silver_orders,
+    )
+
+    silver_customers = PythonOperator(
+        task_id="transform_silver_customers",
+        python_callable=transform_silver_customers,
+    )
+
+    # ── Gold layer ────────────────────────────────────────────
+    gold_360 = PythonOperator(
+        task_id="build_gold_customer_360",
+        python_callable=build_gold_customer_360,
+    )
+
+    gold_daily = PythonOperator(
+        task_id="build_gold_daily_sales",
+        python_callable=build_gold_daily_sales,
+    )
+
+    # ── Logging ───────────────────────────────────────────────
+    log_result = PythonOperator(
+        task_id="log_pipeline_result",
+        python_callable=log_pipeline_result,
+        trigger_rule="all_success",
+    )
+
+    # ── Dependencies ──────────────────────────────────────────
+    # Parallel bronze loads → parallel silver transforms → parallel gold builds → log
+    wait_orders >> bronze_orders >> silver_orders
+    wait_customers >> bronze_customers >> silver_customers
+    [silver_orders, silver_customers] >> gold_360
+    silver_orders >> gold_daily
+    [gold_360, gold_daily] >> log_result

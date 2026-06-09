@@ -1,0 +1,235 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<pipeline>
+  <info>
+    <name>kafka_orders_consumer</name>
+    <name_sync_with_filename>Y</name_sync_with_filename>
+    <description>Consume order events from the Kafka orders.raw topic, parse JSON payloads, and write to the bronze_kafka_events table. This pipeline can run as a continuous consumer or be triggered by Airflow for batch consumption.</description>
+    <extended_description/>
+    <pipeline_version/>
+    <pipeline_type>Normal</pipeline_type>
+    <parameters>
+      <parameter>
+        <name>KAFKA_BROKER</name>
+        <default_value>kafka:29092</default_value>
+        <description>Kafka bootstrap server address</description>
+      </parameter>
+      <parameter>
+        <name>KAFKA_TOPIC</name>
+        <default_value>orders.raw</default_value>
+        <description>Kafka topic to consume from</description>
+      </parameter>
+      <parameter>
+        <name>KAFKA_GROUP</name>
+        <default_value>hop-consumer-group</default_value>
+        <description>Kafka consumer group ID</description>
+      </parameter>
+    </parameters>
+    <capture_transform_performance>N</capture_transform_performance>
+    <transform_performance_capturing_delay>1000</transform_performance_capturing_delay>
+    <transform_performance_capturing_size_limit/>
+    <created_user>lab-admin</created_user>
+    <created_date>2026/06/08 09:00:00.000</created_date>
+    <modified_user>lab-admin</modified_user>
+    <modified_date>2026/06/08 09:00:00.000</modified_date>
+  </info>
+  <notepads>
+    <notepad>
+      <note>Kafka Consumer Pipeline
+Reads from orders.raw topic → Parses JSON → Writes to bronze_kafka_events.
+Demonstrates Hop's Kafka integration called by Airflow DAG 09.</note>
+      <xloc>64</xloc>
+      <yloc>32</yloc>
+      <width>480</width>
+      <heigth>50</heigth>
+      <fontname>Noto Sans</fontname>
+      <fontsize>10</fontsize>
+      <fontbold>N</fontbold>
+      <fontitalic>N</fontitalic>
+      <fontcolorred>0</fontcolorred>
+      <fontcolorgreen>0</fontcolorgreen>
+      <fontcolorblue>0</fontcolorblue>
+      <backgroundcolorred>200</backgroundcolorred>
+      <backgroundcolorgreen>220</backgroundcolorgreen>
+      <backgroundcolorblue>255</backgroundcolorblue>
+      <bordercolorred>100</bordercolorred>
+      <bordercolorgreen>100</bordercolorgreen>
+      <bordercolorblue>100</bordercolorblue>
+    </notepad>
+  </notepads>
+  <order>
+    <hop>
+      <from>Kafka Consumer</from>
+      <to>Parse JSON Payload</to>
+      <enabled>Y</enabled>
+    </hop>
+    <hop>
+      <from>Parse JSON Payload</from>
+      <to>Add Ingestion Metadata</to>
+      <enabled>Y</enabled>
+    </hop>
+    <hop>
+      <from>Add Ingestion Metadata</from>
+      <to>Write Bronze Kafka Events</to>
+      <enabled>Y</enabled>
+    </hop>
+  </order>
+  <transform>
+    <name>Kafka Consumer</name>
+    <type>KafkaConsumerInput</type>
+    <description>Consume messages from the orders.raw Kafka topic.</description>
+    <distribute>Y</distribute>
+    <custom_distribution/>
+    <copies>1</copies>
+    <partitioning>
+      <method>none</method>
+      <schema_name/>
+    </partitioning>
+    <topic>${KAFKA_TOPIC}</topic>
+    <consumerGroup>${KAFKA_GROUP}</consumerGroup>
+    <transformNameMappingDefinition>Parse JSON Payload</transformNameMappingDefinition>
+    <batchSize>100</batchSize>
+    <batchDuration>5000</batchDuration>
+    <directBootstrapServers>${KAFKA_BROKER}</directBootstrapServers>
+    <AUTO_COMMIT>Y</AUTO_COMMIT>
+    <OutputField>
+      <outputName>kafkaKey</outputName>
+      <type>key</type>
+    </OutputField>
+    <OutputField>
+      <outputName>kafkaMessage</outputName>
+      <type>message</type>
+    </OutputField>
+    <OutputField>
+      <outputName>kafkaTopic</outputName>
+      <type>topic</type>
+    </OutputField>
+    <OutputField>
+      <outputName>kafkaPartition</outputName>
+      <type>partition</type>
+    </OutputField>
+    <OutputField>
+      <outputName>kafkaOffset</outputName>
+      <type>offset</type>
+    </OutputField>
+    <OutputField>
+      <outputName>kafkaTimestamp</outputName>
+      <type>timestamp</type>
+    </OutputField>
+    <advancedConfig>
+      <option><property>auto.offset.reset</property><value>earliest</value></option>
+    </advancedConfig>
+    <attributes/>
+    <GUI>
+      <xloc>128</xloc>
+      <yloc>192</yloc>
+    </GUI>
+  </transform>
+  <transform>
+    <name>Parse JSON Payload</name>
+    <type>JsonInput</type>
+    <description>Parse the JSON message payload to extract order fields.</description>
+    <distribute>Y</distribute>
+    <custom_distribution/>
+    <copies>1</copies>
+    <partitioning>
+      <method>none</method>
+      <schema_name/>
+    </partitioning>
+    <include>N</include>
+    <include_field/>
+    <rownum>N</rownum>
+    <addresultfile>N</addresultfile>
+    <readurl>N</readurl>
+    <removeSourceField>N</removeSourceField>
+    <IsIgnoreEmptyFile>N</IsIgnoreEmptyFile>
+    <doNotFailIfNoFile>Y</doNotFailIfNoFile>
+    <ignoreMissingPath>Y</ignoreMissingPath>
+    <defaultPathLeafToNull>Y</defaultPathLeafToNull>
+    <rownum_field/>
+    <file>
+      <name/>
+      <filemask/>
+      <exclude_filemask/>
+      <file_required>N</file_required>
+      <include_subfolders>N</include_subfolders>
+    </file>
+    <fields>
+      <field><name>order_id</name><path>$.order_id</path><type>Integer</type><format/><currency/><decimal/><group/><length>-1</length><precision>-1</precision><trim_type>none</trim_type><repeat>N</repeat></field>
+      <field><name>customer_id</name><path>$.customer_id</path><type>Integer</type><format/><currency/><decimal/><group/><length>-1</length><precision>-1</precision><trim_type>none</trim_type><repeat>N</repeat></field>
+      <field><name>product_id</name><path>$.product_id</path><type>String</type><format/><currency/><decimal/><group/><length>32</length><precision>-1</precision><trim_type>none</trim_type><repeat>N</repeat></field>
+      <field><name>status</name><path>$.status</path><type>String</type><format/><currency/><decimal/><group/><length>32</length><precision>-1</precision><trim_type>none</trim_type><repeat>N</repeat></field>
+      <field><name>amount</name><path>$.amount</path><type>Number</type><format/><currency/><decimal/><group/><length>12</length><precision>2</precision><trim_type>none</trim_type><repeat>N</repeat></field>
+    </fields>
+    <sourceFieldName>kafkaMessage</sourceFieldName>
+    <sourceIsAFile>N</sourceIsAFile>
+    <limit>0</limit>
+    <attributes/>
+    <GUI>
+      <xloc>416</xloc>
+      <yloc>192</yloc>
+    </GUI>
+  </transform>
+  <transform>
+    <name>Add Ingestion Metadata</name>
+    <type>ScriptValueMod</type>
+    <description>Add load timestamp.</description>
+    <distribute>Y</distribute>
+    <custom_distribution/>
+    <copies>1</copies>
+    <partitioning>
+      <method>none</method>
+      <schema_name/>
+    </partitioning>
+    <optimizationLevel>9</optimizationLevel>
+    <jsScripts>
+      <jsScript>
+        <jsScript_type>0</jsScript_type>
+        <jsScript_name>Metadata</jsScript_name>
+        <jsScript_script>var _loaded_at = new java.util.Date();</jsScript_script>
+      </jsScript>
+    </jsScripts>
+    <fields>
+      <field><name>_loaded_at</name><rename>_loaded_at</rename><type>Date</type><length>-1</length><precision>-1</precision><replace>N</replace></field>
+    </fields>
+    <attributes/>
+    <GUI>
+      <xloc>672</xloc>
+      <yloc>192</yloc>
+    </GUI>
+  </transform>
+  <transform>
+    <name>Write Bronze Kafka Events</name>
+    <type>TableOutput</type>
+    <description>Write parsed Kafka events to bronze_kafka_events.</description>
+    <distribute>Y</distribute>
+    <custom_distribution/>
+    <copies>1</copies>
+    <partitioning>
+      <method>none</method>
+      <schema_name/>
+    </partitioning>
+    <connection>warehouse</connection>
+    <schema>public</schema>
+    <table>bronze_kafka_events</table>
+    <commit>500</commit>
+    <truncate>N</truncate>
+    <ignore_errors>N</ignore_errors>
+    <use_batch>Y</use_batch>
+    <specify_fields>N</specify_fields>
+    <partitioning_enabled>N</partitioning_enabled>
+    <partitioning_field/>
+    <partitioning_daily>N</partitioning_daily>
+    <partitioning_monthly>N</partitioning_monthly>
+    <tablename_in_field>N</tablename_in_field>
+    <tablename_field/>
+    <tablename_in_table>Y</tablename_in_table>
+    <return_keys>N</return_keys>
+    <return_field/>
+    <fields/>
+    <attributes/>
+    <GUI>
+      <xloc>928</xloc>
+      <yloc>192</yloc>
+    </GUI>
+  </transform>
+</pipeline>

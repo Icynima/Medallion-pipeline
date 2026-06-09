@@ -1,0 +1,11 @@
+customer_id,customer_name,email,city,country,signup_date
+101,Alice Johnson,alice.johnson@email.com,New York,US,2025-01-15
+102,Bob Smith,bob.smith@email.com,London,UK,2025-02-20
+103,Charlie Chen,charlie.chen@email.com,Singapore,SG,2025-03-10
+104,Diana Martinez,diana.martinez@email.com,Madrid,ES,2025-04-05
+105,Erik Andersson,erik.andersson@email.com,Stockholm,SE,2025-05-12
+106,Fatima Al-Hassan,fatima.alhassan@email.com,Dubai,AE,2025-06-18
+107,George Papadopoulos,,Athens,GR,2025-07-22
+108,Hannah Kim,hannah.kim@email.com,Seoul,KR,2025-08-30
+109,Ivan Petrov,ivan.petrov@email.com,Moscow,RU,2025-09-14
+110,Julia Santos,julia.santos@email.com,São Paulo,BR,2025-10-01

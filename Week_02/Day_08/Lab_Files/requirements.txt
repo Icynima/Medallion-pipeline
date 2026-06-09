@@ -1,0 +1,8 @@
+# Day 8 – Python dependencies for Airflow DAGs
+apache-airflow-providers-postgres==5.7.1
+apache-airflow-providers-docker==3.8.1
+apache-airflow-providers-http==4.6.0
+kafka-python-ng==2.2.2
+psycopg2-binary==2.9.9
+sqlalchemy==1.4.52
+pandas==2.1.4

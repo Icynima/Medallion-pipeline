@@ -1,0 +1,11 @@
+product_id,product_name,category,unit_price,supplier
+P001,Wireless Mouse,Electronics,15.99,TechSupply Co
+P002,USB-C Cable,Electronics,9.99,CableMart
+P003,Notebook A5,Stationery,3.50,PaperWorld
+P004,Mechanical Keyboard,Electronics,89.99,TechSupply Co
+P005,Standing Desk Pad,Office,45.00,ErgoDesk Inc
+P006,Monitor Light Bar,Electronics,59.99,LightTech
+P007,Gel Pen Pack,Stationery,1.25,PaperWorld
+P008,Webcam HD,Electronics,39.99,TechSupply Co
+P009,Ergonomic Chair,Office,299.99,ErgoDesk Inc
+P010,Desk Organizer,Office,24.99,OfficePro
