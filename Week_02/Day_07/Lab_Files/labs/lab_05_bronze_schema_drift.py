@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pyspark.sql import functions as F
+
 from day7_common import OUTPUT_DIR, ensure_output_dirs, read_bronze_orders, require_source_data, spark_session, write_csv_dir
 
 
@@ -9,11 +11,15 @@ def main() -> None:
     spark = spark_session("Day7Lab05BronzeSchemaDrift")
 
     bronze = read_bronze_orders(spark)
-    total_rows = bronze.count()
+    metrics = bronze.agg(
+        F.count(F.lit(1)).alias("__total_rows"),
+        *[F.count(F.col(field.name)).alias(field.name) for field in bronze.schema.fields],
+    ).first().asDict()
+    total_rows = metrics["__total_rows"]
     profile_rows = []
     for field in bronze.schema.fields:
         column = field.name
-        non_null = bronze.filter(bronze[column].isNotNull()).count()
+        non_null = metrics[column]
         profile_rows.append((column, field.dataType.simpleString(), non_null, total_rows - non_null))
 
     profile = spark.createDataFrame(profile_rows, ["column_name", "data_type", "non_null_rows", "null_rows"])

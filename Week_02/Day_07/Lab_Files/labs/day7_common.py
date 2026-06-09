@@ -21,6 +21,24 @@ ORDER_SOURCE_FILES = [
     SOURCE_DIR / "order_events_batch_2.jsonl",
 ]
 
+ORDER_EVENT_SCHEMA = StructType(
+    [
+        StructField("event_id", StringType(), False),
+        StructField("order_id", IntegerType(), False),
+        StructField("customer_id", IntegerType(), True),
+        StructField("product_id", StringType(), True),
+        StructField("status", StringType(), True),
+        StructField("amount", DoubleType(), True),
+        StructField("currency", StringType(), True),
+        StructField("channel", StringType(), True),
+        StructField("event_time", StringType(), True),
+        # Batch 2 introduces these nullable fields; keeping them in the contract
+        # makes schema drift visible without relying on Spark schema inference.
+        StructField("coupon_code", StringType(), True),
+        StructField("delivery_promise", StringType(), True),
+    ]
+)
+
 CUSTOMER_SCHEMA = StructType(
     [
         StructField("customer_id", IntegerType(), False),
@@ -123,7 +141,7 @@ def read_fx_rates(spark: SparkSession) -> DataFrame:
 
 def read_order_events(spark: SparkSession, files: list[Path] | None = None) -> DataFrame:
     paths = files or ORDER_SOURCE_FILES
-    return spark.read.json([str(path) for path in paths])
+    return spark.read.schema(ORDER_EVENT_SCHEMA).json([str(path) for path in paths])
 
 
 def with_bronze_metadata(df: DataFrame, batch_id: str) -> DataFrame:
@@ -183,6 +201,21 @@ def quality_checked_orders(df: DataFrame) -> DataFrame:
         .withColumn("is_valid", F.size(F.col("quality_errors")) == 0)
         .drop("_quality_errors_raw")
     )
+
+
+def deduplicate_order_events(df: DataFrame) -> DataFrame:
+    deduplication_keys = [
+        "order_id",
+        "customer_id",
+        "product_id",
+        "status",
+        "amount",
+        "currency",
+        "channel",
+        "event_time_ts",
+    ]
+    available_keys = [column for column in deduplication_keys if column in df.columns]
+    return df.dropDuplicates(available_keys)
 
 
 def latest_order_state(df: DataFrame) -> DataFrame:
@@ -265,7 +298,7 @@ def gold_frames(enriched: DataFrame) -> dict[str, DataFrame]:
     }
 
 
-def count_rows(path: Path) -> int:
+def count_files(path: Path) -> int:
     if not path.exists():
         return 0
     return len([item for item in path.rglob("*") if item.is_file() and not item.name.startswith(".")])

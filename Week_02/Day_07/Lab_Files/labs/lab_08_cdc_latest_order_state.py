@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from day7_common import LAKE_DIR, OUTPUT_DIR, ensure_output_dirs, latest_order_state, require_source_data, spark_session, write_csv_dir
+from day7_common import LAKE_DIR, OUTPUT_DIR, deduplicate_order_events, ensure_output_dirs, latest_order_state, require_source_data, spark_session, write_csv_dir
 
 
 def main() -> None:
@@ -9,18 +9,28 @@ def main() -> None:
     spark = spark_session("Day7Lab08CdcLatestState")
 
     valid = spark.read.parquet(str(LAKE_DIR / "silver" / "orders_valid"))
-    current = latest_order_state(valid)
+    deduplicated = deduplicate_order_events(valid)
+    deduplicated.write.mode("overwrite").parquet(str(LAKE_DIR / "silver" / "orders_deduplicated"))
+    current = latest_order_state(deduplicated)
     current_path = LAKE_DIR / "silver" / "orders_current"
     current.write.mode("overwrite").parquet(str(current_path))
 
+    write_csv_dir(
+        deduplicated.select("order_id", "event_id", "status", "amount", "currency", "event_time_ts").orderBy(
+            "order_id", "event_time_ts", "event_id"
+        ),
+        OUTPUT_DIR / "lab_08_deduplicated_events_preview",
+    )
     write_csv_dir(
         current.select("order_id", "event_id", "status", "amount", "currency", "event_time_ts").orderBy("order_id"),
         OUTPUT_DIR / "lab_08_orders_current_preview",
     )
 
     print("LAB 08 COMPLETE")
+    print(f"Valid rows before deduplication: {valid.count()}")
+    print(f"Rows after explicit Silver deduplication: {deduplicated.count()}")
     print(f"Current order rows: {current.count()}")
-    print("Concepts: CDC, window functions, latest-state tables.")
+    print("Concepts: explicit deduplication, CDC, window functions, latest-state tables.")
     spark.stop()
 
 

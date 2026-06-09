@@ -5,7 +5,7 @@ from pathlib import Path
 
 from pyspark.sql import functions as F
 
-from day7_common import LAKE_DIR, ORDER_SOURCE_FILES, OUTPUT_DIR, STATE_DIR, cleaned_orders, enriched_orders, ensure_output_dirs, gold_frames, latest_order_state, quality_checked_orders, read_order_events, require_source_data, reset_dir, spark_session, with_bronze_metadata, write_csv_dir, write_json_report
+from day7_common import LAKE_DIR, ORDER_SOURCE_FILES, OUTPUT_DIR, STATE_DIR, cleaned_orders, deduplicate_order_events, enriched_orders, ensure_output_dirs, gold_frames, latest_order_state, quality_checked_orders, read_order_events, require_source_data, spark_session, with_bronze_metadata, write_csv_dir, write_json_report
 
 
 def load_manifest(path: Path) -> dict[str, object]:
@@ -20,13 +20,12 @@ def main() -> None:
     spark = spark_session("Day7Lab11IncrementalProcessing")
 
     incremental_lake = LAKE_DIR / "incremental"
-    reset_dir(incremental_lake)
+    incremental_lake.mkdir(parents=True, exist_ok=True)
     manifest_path = STATE_DIR / "lab_11_incremental_manifest.json"
-    if manifest_path.exists():
-        manifest_path.unlink()
 
     manifest = load_manifest(manifest_path)
     bronze_path = incremental_lake / "bronze" / "orders_raw"
+    processed_this_run = 0
 
     for index, source_file in enumerate(ORDER_SOURCE_FILES, start=1):
         processed_files = set(manifest["processed_files"])
@@ -41,15 +40,24 @@ def main() -> None:
         manifest["processed_files"].append(source_file.name)
         manifest["batches"].append({"batch_id": batch_id, "source_file": source_file.name, "rows": row_count})
         write_json_report(manifest_path, manifest)
+        processed_this_run += 1
         print(f"Processed {source_file.name}: {row_count} Bronze rows")
+
+    if not bronze_path.exists():
+        raise FileNotFoundError(
+            "No incremental Bronze data found. Run the lab once with source files available, "
+            "or delete the stale manifest and rerun."
+        )
 
     bronze = spark.read.parquet(str(bronze_path))
     checked = quality_checked_orders(cleaned_orders(bronze))
     valid = checked.filter(F.col("is_valid"))
-    current = latest_order_state(valid)
+    deduplicated = deduplicate_order_events(valid)
+    current = latest_order_state(deduplicated)
     enriched = enriched_orders(spark, current)
 
     valid.write.mode("overwrite").parquet(str(incremental_lake / "silver" / "orders_valid"))
+    deduplicated.write.mode("overwrite").parquet(str(incremental_lake / "silver" / "orders_deduplicated"))
     current.write.mode("overwrite").parquet(str(incremental_lake / "silver" / "orders_current"))
     enriched.write.mode("overwrite").parquet(str(incremental_lake / "silver" / "orders_enriched"))
 
@@ -60,8 +68,10 @@ def main() -> None:
         [
             ("bronze_rows", bronze.count()),
             ("silver_valid_rows", valid.count()),
+            ("silver_deduplicated_rows", deduplicated.count()),
             ("current_order_rows", current.count()),
             ("processed_files", len(manifest["processed_files"])),
+            ("files_processed_this_run", processed_this_run),
         ],
         ["metric", "value"],
     )
