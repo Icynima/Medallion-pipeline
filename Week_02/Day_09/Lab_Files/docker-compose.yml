@@ -66,6 +66,11 @@ services:
       KAFKA_OPTS: '-javaagent:/opt/jmx-exporter/jmx_prometheus_javaagent.jar=7071:/opt/jmx-exporter/kafka.yml'
     volumes:
       - ./jmx_exporter:/opt/jmx-exporter
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "kafka2:29092"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
 
   kafka3:
     image: confluentinc/cp-kafka:7.6.1
@@ -91,6 +96,11 @@ services:
       KAFKA_OPTS: '-javaagent:/opt/jmx-exporter/jmx_prometheus_javaagent.jar=7071:/opt/jmx-exporter/kafka.yml'
     volumes:
       - ./jmx_exporter:/opt/jmx-exporter
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "kafka3:29092"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
 
   # ---------------------------------------------------------------------------
   # POSTGRES - reference database (drivers table, also used by ksqlDB joins)
@@ -116,10 +126,16 @@ services:
 
   # ---------------------------------------------------------------------------
   # KAFKA CONNECT + DEBEZIUM - CDC from Postgres into Kafka
+  #   * Debezium image uses UNPREFIXED env vars (BOOTSTRAP_SERVERS, GROUP_ID,
+  #     REST_ADVERTISED_HOST_NAME, ...) - NOT the Confluent CONNECT_* prefix.
+  #   * Internal storage topics use RF=3 so they survive a single broker loss.
+  #   * KEY/VALUE_CONVERTER_SCHEMAS_ENABLE=false keeps JSON payloads clean
+  #     (matches the per-connector setting in debezium-postgres.json).
   # ---------------------------------------------------------------------------
   kafka-connect:
     image: debezium/connect:2.6
     container_name: kafka-connect
+    hostname: kafka-connect
     ports:
       - "8083:8083"
     environment:
@@ -133,33 +149,67 @@ services:
       STATUS_STORAGE_REPLICATION_FACTOR: 3
       KEY_CONVERTER: "org.apache.kafka.connect.json.JsonConverter"
       VALUE_CONVERTER: "org.apache.kafka.connect.json.JsonConverter"
-      CONNECT_REST_ADVERTISED_HOST_NAME: "kafka-connect"
+      KEY_CONVERTER_SCHEMAS_ENABLE: "false"
+      VALUE_CONVERTER_SCHEMAS_ENABLE: "false"
+      OFFSET_FLUSH_INTERVAL_MS: 10000
+      REST_ADVERTISED_HOST_NAME: "kafka-connect"
+      REST_PORT: 8083
     depends_on:
-      - kafka1
-      - postgres
+      kafka1:
+        condition: service_healthy
+      kafka2:
+        condition: service_started
+      kafka3:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8083/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
 
   # ---------------------------------------------------------------------------
   # SCHEMA REGISTRY - schema management for ksqlDB / Avro / JSON Schema
+  #   * Kafkastore topic created with RF=3 so it survives broker loss.
+  #   * Listeners pinned explicitly for predictability.
   # ---------------------------------------------------------------------------
   schema-registry:
     image: confluentinc/cp-schema-registry:7.6.1
     container_name: schema-registry
+    hostname: schema-registry
     ports:
       - "8081:8081"
     environment:
       SCHEMA_REGISTRY_HOST_NAME: schema-registry
+      SCHEMA_REGISTRY_LISTENERS: 'http://0.0.0.0:8081'
       SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: 'PLAINTEXT://kafka1:29092,PLAINTEXT://kafka2:29092,PLAINTEXT://kafka3:29092'
+      SCHEMA_REGISTRY_KAFKASTORE_TOPIC_REPLICATION_FACTOR: 3
+      SCHEMA_REGISTRY_SCHEMA_COMPATIBILITY_LEVEL: 'backward'
     depends_on:
-      - kafka1
-      - kafka2
-      - kafka3
+      kafka1:
+        condition: service_healthy
+      kafka2:
+        condition: service_started
+      kafka3:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8081/subjects || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
 
   # ---------------------------------------------------------------------------
   # KSQLDB SERVER - SQL-based stream processing (used in Lab 11)
+  #   * Internal command topic + stream-processor topics need RF=3 because
+  #     brokers enforce min.insync.replicas=2 (RF=1 topics would fail to write).
   # ---------------------------------------------------------------------------
   ksqldb-server:
     image: confluentinc/cp-ksqldb-server:7.6.1
     container_name: ksqldb-server
+    hostname: ksqldb-server
     ports:
       - "8088:8088"
     environment:
@@ -168,9 +218,20 @@ services:
       KSQL_LISTENERS: 'http://0.0.0.0:8088'
       KSQL_KSQL_SERVICE_ID: 'taxi_'
       KSQL_KSQL_SCHEMA_REGISTRY_URL: 'http://schema-registry:8081'
+      KSQL_KSQL_INTERNAL_TOPIC_REPLICAS: 3
+      KSQL_KSQL_STREAMS_REPLICATION_FACTOR: 3
+      KSQL_KSQL_STREAMS_PRODUCER_ACKS: 'all'
+      KSQL_KSQL_STREAMS_TOPIC_MIN_INSYNC_REPLICAS: 2
+      KSQL_KSQL_LOGGING_PROCESSING_TOPIC_REPLICATION_FACTOR: 3
     depends_on:
-      - kafka1
-      - schema-registry
+      kafka1:
+        condition: service_healthy
+      kafka2:
+        condition: service_started
+      kafka3:
+        condition: service_started
+      schema-registry:
+        condition: service_started
 
   ksqldb-cli:
     image: confluentinc/cp-ksqldb-cli:7.6.1
@@ -181,23 +242,41 @@ services:
       - ksqldb-server
 
   # ---------------------------------------------------------------------------
-  # KAFKA UI - visual cluster inspector (topics, partitions, consumer groups)
+  # KAFKA UI - visual cluster inspector
+  #   * Wired to Schema Registry, ksqlDB AND Kafka Connect (one place for
+  #     topics, consumer groups, schemas, ksqlDB queries, connectors).
+  #   * METRICS_TYPE=PROMETHEUS because each broker exposes Prometheus-format
+  #     metrics on :7071 via the JMX-exporter Java agent (not raw JMX).
   # ---------------------------------------------------------------------------
   kafka-ui:
-    image: provectuslabs/kafka-ui:latest
+    image: provectuslabs/kafka-ui:v0.7.2
     container_name: kafka-ui
     ports:
       - "8080:8080"
     environment:
       KAFKA_CLUSTERS_0_NAME: 'taxi-kraft-cluster'
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: 'kafka1:29092,kafka2:29092,kafka3:29092'
+      KAFKA_CLUSTERS_0_METRICS_TYPE: 'PROMETHEUS'
       KAFKA_CLUSTERS_0_METRICS_PORT: 7071
       KAFKA_CLUSTERS_0_SCHEMAREGISTRY: 'http://schema-registry:8081'
       KAFKA_CLUSTERS_0_KSQLDBSERVER: 'http://ksqldb-server:8088'
+      KAFKA_CLUSTERS_0_KAFKACONNECT_0_NAME: 'debezium-connect'
+      KAFKA_CLUSTERS_0_KAFKACONNECT_0_ADDRESS: 'http://kafka-connect:8083'
+      DYNAMIC_CONFIG_ENABLED: 'true'
+      LOGGING_LEVEL_ROOT: 'INFO'
     depends_on:
-      - kafka1
-      - kafka2
-      - kafka3
+      kafka1:
+        condition: service_healthy
+      kafka2:
+        condition: service_started
+      kafka3:
+        condition: service_started
+      schema-registry:
+        condition: service_started
+      kafka-connect:
+        condition: service_started
+      ksqldb-server:
+        condition: service_started
 
   # ---------------------------------------------------------------------------
   # KAFKA LAG EXPORTER - exposes consumer lag as Prometheus metrics
